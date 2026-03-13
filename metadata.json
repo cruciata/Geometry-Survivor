@@ -1,0 +1,5 @@
+{
+  "name": "几何幸存者",
+  "description": "一款极简主义生存Roguelike游戏，控制几何图形在敌群中生存，升级并获得强大技能。",
+  "requestFramePermissions": []
+}
