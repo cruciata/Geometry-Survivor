@@ -1,4 +1,4 @@
-import { Skill, WeaponType, PassiveType, Character } from './types';
+import { Skill, WeaponType, PassiveType, Character, Level } from './types';
 
 export const CHARACTERS: Character[] = [
   {
@@ -199,6 +199,91 @@ export const SKILLS: Skill[] = [
     maxLevel: 1,
     nextLevelPreview: '已达最大等级',
   },
+];
+
+export const LEVELS: Level[] = [
+  {
+    id: 'city',
+    name: '城市废墟',
+    description: '破碎的都市，几何生命的起源之地。',
+    duration: 180,
+    theme: { bgColor: '#263238', groundColor: 'rgba(255,255,255,0.05)', decorColor: '#37474f' },
+    unlockCondition: '初始可用'
+  },
+  {
+    id: 'neon',
+    name: '霓虹实验室',
+    description: '高压实验环境，注意随机出现的激光陷阱。',
+    duration: 300,
+    theme: { bgColor: '#1a237e', groundColor: '#00bcd4', decorColor: '#283593' },
+    specialRules: ['随机激光陷阱', '实验体分裂'],
+    unlockCondition: '通关城市废墟'
+  },
+  {
+    id: 'volcano',
+    name: '火山核心',
+    description: '极热之地，岩浆不断上涨，寻找安全平台。',
+    duration: 240,
+    theme: { bgColor: '#3e2723', groundColor: '#ff5722', decorColor: '#4e342e' },
+    specialRules: ['岩浆伤害', '安全平台', '自爆火灵'],
+    unlockCondition: '使用焰灵通关任意关卡'
+  },
+  {
+    id: 'void',
+    name: '虚空裂隙',
+    description: '无尽的虚空，重力异常，挑战生存极限。',
+    duration: 0,
+    theme: { bgColor: '#000000', groundColor: '#4a148c', decorColor: '#121212' },
+    specialRules: ['重力吸引', '无限模式', '技能掉落'],
+    unlockCondition: '累计生存30分钟'
+  },
+  {
+    id: 'boss_rush',
+    name: 'Boss Rush',
+    description: '巅峰对决，连续挑战所有强大的首领。',
+    duration: 600,
+    theme: { bgColor: '#212121', groundColor: '#ffd700', decorColor: '#424242' },
+    specialRules: ['仅限Boss', '中场休息', '无复活'],
+    unlockCondition: '通关实验室与火山'
+  }
+];
+
+export const ACHIEVEMENTS = [
+  {
+    id: 'first_blood',
+    name: '第一滴血',
+    description: '累计击杀 100 个敌人',
+    icon: '🩸',
+    target: 100
+  },
+  {
+    id: 'survivor',
+    name: '生存专家',
+    description: '单局生存超过 2 分钟',
+    icon: '🛡️',
+    target: 120
+  },
+  {
+    id: 'level_master',
+    name: '等级大师',
+    description: '单局达到 10 级',
+    icon: '⭐',
+    target: 10
+  },
+  {
+    id: 'boss_slayer',
+    name: '首领克星',
+    description: '击败最终首领',
+    icon: '⚔️',
+    target: 1
+  },
+  {
+    id: 'collector',
+    name: '收集狂人',
+    description: '累计收集 1000 个经验球',
+    icon: '💎',
+    target: 1000
+  }
 ];
 
 export const getSkillUpgrade = (skill: Skill) => {

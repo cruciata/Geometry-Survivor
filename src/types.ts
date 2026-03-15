@@ -88,12 +88,20 @@ export interface Player extends Entity {
 export interface Enemy extends Entity {
   damage: number;
   xpValue: number;
-  type: 'TRIANGLE' | 'SQUARE' | 'DIAMOND' | 'STAR' | 'CIRCLE' | 'BOSS';
+  type: 'TRIANGLE' | 'SQUARE' | 'DIAMOND' | 'STAR' | 'CIRCLE' | 'BOSS' | 'EXPERIMENT' | 'FIRE_SPIRIT' | 'MAGMA_WORM' | 'VOID_WALKER' | 'SHIELD_GENERATOR' | 'CHARGER' | 'COMMANDER';
   color: string;
   isElite?: boolean;
   sprintTimer?: number;
   shootTimer?: number;
   phase?: 'normal' | 'rage';
+  splitCount?: number;
+  isSmall?: boolean;
+  wormSegments?: Vector2D[];
+  teleportTimer?: number;
+  chargeTimer?: number;
+  isCharging?: boolean;
+  shieldedBy?: string;
+  buffTimer?: number;
 }
 
 export interface GameItem {
@@ -102,6 +110,33 @@ export interface GameItem {
   type: 'CLEAR';
   radius: number;
   rotation: number;
+}
+
+export interface Level {
+  id: string;
+  name: string;
+  description: string;
+  duration: number; // seconds, 0 for infinite
+  theme: {
+    bgColor: string;
+    groundColor: string;
+    decorColor: string;
+  };
+  specialRules?: string[];
+  unlockCondition: string;
+}
+
+export interface LaserTrap {
+  id: string;
+  y: number;
+  state: 'warning' | 'active' | 'fade';
+  timer: number;
+}
+
+export interface Platform {
+  x: number;
+  y: number;
+  radius: number;
 }
 
 export interface Projectile {
@@ -122,4 +157,19 @@ export interface XPGem {
   pos: Vector2D;
   value: number;
   color: string;
+}
+
+export interface Achievement {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  isUnlocked: boolean;
+  progress?: number;
+  target?: number;
+}
+
+export interface AchievementData {
+  id: string;
+  unlockedAt: number;
 }

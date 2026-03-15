@@ -73,21 +73,35 @@ export const Joystick: React.FC<JoystickProps> = ({ onMove }) => {
   return (
     <div 
       ref={containerRef}
-      className="fixed inset-0 z-10 touch-none"
+      className="absolute inset-0 z-10 touch-none"
       onMouseDown={handleStart}
       onTouchStart={handleStart}
     >
-      {isDragging && (
-        <>
-          <div 
-            className="fixed w-32 h-32 bg-white/10 border-2 border-white/20 rounded-full pointer-events-none"
-            style={{ left: basePos.x - 64, top: basePos.y - 64 }}
-          />
-          <div 
-            className="fixed w-16 h-16 bg-white/40 rounded-full pointer-events-none shadow-lg"
-            style={{ left: stickPos.x - 32, top: stickPos.y - 32 }}
-          />
-        </>
+      {isDragging && containerRef.current && (
+        (() => {
+          const rect = containerRef.current.getBoundingClientRect();
+          const scaleX = 750 / rect.width;
+          const scaleY = (1334 - 70) / rect.height; // Account for the top offset in App.tsx
+          
+          return (
+            <>
+              <div 
+                className="absolute w-32 h-32 bg-white/10 border-2 border-white/20 rounded-full pointer-events-none"
+                style={{ 
+                  left: (basePos.x - rect.left) * scaleX - 64, 
+                  top: (basePos.y - rect.top) * scaleY - 64 
+                }}
+              />
+              <div 
+                className="absolute w-16 h-16 bg-white/40 rounded-full pointer-events-none shadow-lg"
+                style={{ 
+                  left: (stickPos.x - rect.left) * scaleX - 32, 
+                  top: (stickPos.y - rect.top) * scaleY - 32 
+                }}
+              />
+            </>
+          );
+        })()
       )}
     </div>
   );

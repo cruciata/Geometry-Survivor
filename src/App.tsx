@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Joystick } from './components/Joystick';
 import { GameOver } from './components/GameOver';
-import { Player, Enemy, Projectile, XPGem, WeaponType, PassiveType, Skill, GroundSpike, GameItem, Vector2D, Character } from './types';
-import { SKILLS, CHARACTERS } from './constants';
+import { Player, Enemy, Projectile, XPGem, WeaponType, PassiveType, Skill, GroundSpike, GameItem, Vector2D, Character, Level, LaserTrap, Platform } from './types';
+import { SKILLS, CHARACTERS, LEVELS, ACHIEVEMENTS } from './constants';
 import { motion, AnimatePresence } from 'motion/react';
+import { audioService } from './services/audioService';
 
 // 绘制圆角矩形
 function drawRoundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number, fill?: string | CanvasGradient, stroke?: string | CanvasGradient) {
@@ -26,6 +27,111 @@ function drawRotatedRect(ctx: CanvasRenderingContext2D, cx: number, cy: number, 
   ctx.fillStyle = color;
   ctx.fillRect(-w / 2, -h / 2, w, h);
   ctx.restore();
+}
+
+function drawTopBar(ctx: CanvasRenderingContext2D, timer: number, score: number, player: any, menuBtnState: string, isMuted: boolean) {
+  // 顶部背景条
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.fillRect(0, 0, 750, 70);
+  
+  // 血条 (左侧)
+  const hpW = 200;
+  const hpH = 20;
+  drawRoundRect(ctx, 20, 25, hpW, hpH, 10, 'rgba(255,255,255,0.1)');
+  const hpProgress = player.hp / player.maxHp;
+  if (hpProgress > 0) {
+    drawRoundRect(ctx, 20, 25, hpW * hpProgress, hpH, 10, '#ef4444');
+  }
+
+  // 倒计时 (居中)
+  const remainingSeconds = Math.max(0, Math.ceil((180000 - timer) / 1000));
+  const minutes = Math.floor(remainingSeconds / 60);
+  const seconds = remainingSeconds % 60;
+  const timeText = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  ctx.fillStyle = 'white';
+  ctx.font = 'bold 32px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText(timeText, 375, 48);
+
+  // 击杀数/得分 (右侧偏左)
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.font = 'bold 20px monospace';
+  ctx.textAlign = 'right';
+  ctx.fillText(`得分: ${score}`, 600, 45);
+
+  // 静音按钮
+  ctx.fillStyle = 'white';
+  ctx.font = '24px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(isMuted ? '🔇' : '🔊', 630, 45);
+  
+  // 菜单按钮 (最右侧)
+  drawMenuButton(ctx, 660, 15, menuBtnState);
+}
+
+function drawMenuButton(ctx: CanvasRenderingContext2D, x: number, y: number, state: string) {
+  const w = 80, h = 40, r = 8;
+  const scale = state === 'pressed' ? 0.95 : 1;
+  
+  ctx.save();
+  ctx.translate(x + w/2, y + h/2);
+  ctx.scale(scale, scale);
+  ctx.translate(-(x + w/2), -(y + h/2));
+
+  // 背景
+  ctx.fillStyle = state === 'normal' ? '#333' : '#555';
+  ctx.beginPath();
+  // @ts-ignore
+  if (ctx.roundRect) {
+    // @ts-ignore
+    ctx.roundRect(x, y, w, h, r);
+  } else {
+    ctx.rect(x, y, w, h);
+  }
+  ctx.fill();
+  
+  // 文字
+  ctx.fillStyle = 'white';
+  ctx.font = 'bold 16px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('菜单', x + w/2, y + 26);
+  ctx.restore();
+}
+
+function drawPauseMenu(ctx: CanvasRenderingContext2D, hoveredIndex: number | null) {
+  // 遮罩
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.fillRect(0, 0, 750, 1334);
+  
+  // 面板
+  const w = 400, h = 450;
+  const x = (750 - w) / 2, y = (1334 - h) / 2;
+  drawRoundRect(ctx, x, y, w, h, 20, '#1c1c1c', 'white');
+  
+  // 标题
+  ctx.fillStyle = 'white';
+  ctx.font = 'bold 36px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('游戏暂停', 375, y + 80);
+  
+  // 按钮
+  const btnW = 300, btnH = 60;
+  const btnX = (750 - btnW) / 2;
+  
+  const buttons = [
+    { text: '继续游戏', id: 200 },
+    { text: '返回主菜单', id: 201 },
+    { text: '重新开始', id: 202 }
+  ];
+  
+  buttons.forEach((btn, i) => {
+    const btnY = y + 150 + i * 90;
+    const isHovered = hoveredIndex === btn.id;
+    drawRoundRect(ctx, btnX, btnY, btnW, btnH, 30, isHovered ? '#444' : '#333', 'white');
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold 20px sans-serif';
+    ctx.fillText(btn.text, 375, btnY + 38);
+  });
 }
 
 // 绘制多边形（三角形、菱形、五角星等）
@@ -187,9 +293,9 @@ function drawSkillIcon(ctx: CanvasRenderingContext2D, x: number, y: number, skil
   } else if (skill.id === 'rage') {
     ctx.fillStyle = 'white';
     ctx.beginPath();
-    ctx.moveTo(0, iconSize/4);
-    ctx.bezierCurveTo(-iconSize/2, -iconSize/2, -iconSize, iconSize/4, 0, iconSize);
-    ctx.bezierCurveTo(iconSize, iconSize/4, iconSize/2, -iconSize/2, 0, iconSize/4);
+    ctx.moveTo(0, 0);
+    ctx.bezierCurveTo(-iconSize/2, -iconSize/1.5, -iconSize, 0, 0, iconSize/1.5);
+    ctx.bezierCurveTo(iconSize, 0, iconSize/2, -iconSize/1.5, 0, 0);
     ctx.fill();
     ctx.strokeStyle = '#b71c1c';
     ctx.lineWidth = 2;
@@ -206,15 +312,215 @@ function drawSkillIcon(ctx: CanvasRenderingContext2D, x: number, y: number, skil
   ctx.restore();
 }
 
+function drawVortex(ctx: CanvasRenderingContext2D, cx: number, cy: number) {
+  const time = Date.now() / 1000;
+  for (let i = 0; i < 3; i++) {
+    ctx.strokeStyle = `rgba(156,39,176,${0.3 - i * 0.1})`;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    for (let angle = 0; angle < Math.PI * 2; angle += 0.1) {
+      const r = 50 + i * 30 + Math.sin(angle * 3 + time * (i + 1)) * 10;
+      const x = cx + Math.cos(angle + time * (0.5 + i * 0.2)) * r;
+      const y = cy + Math.sin(angle + time * (0.5 + i * 0.2)) * r;
+      if (angle === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.stroke();
+  }
+}
+
+function drawPlatform(ctx: CanvasRenderingContext2D, x: number, y: number, radius: number) {
+  ctx.shadowBlur = 15;
+  ctx.shadowColor = '#4caf50';
+  ctx.fillStyle = 'rgba(76,175,80,0.3)';
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#4caf50';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+}
+
+function drawLava(ctx: CanvasRenderingContext2D, height: number) {
+  const gradient = ctx.createLinearGradient(0, 1334 - height, 0, 1334);
+  gradient.addColorStop(0, 'rgba(255,87,34,0)');
+  gradient.addColorStop(0.5, 'rgba(255,87,34,0.5)');
+  gradient.addColorStop(1, 'rgba(183,28,28,0.8)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 1334 - height, 750, height);
+  
+  for (let i = 0; i < 5; i++) {
+    const bx = (Date.now() / 50 + i * 150) % 750;
+    const by = 1334 - height - 10 - Math.sin(Date.now() / 200 + i) * 5;
+    ctx.fillStyle = 'rgba(255,193,7,0.6)';
+    ctx.beginPath();
+    ctx.arc(bx, by, 8, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawLaser(ctx: CanvasRenderingContext2D, y: number, state: string, progress: number) {
+  if (state === 'warning') {
+    ctx.setLineDash([10, 10]);
+    ctx.strokeStyle = `rgba(255,0,0,${0.3 + progress * 0.4})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(750, y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  } else if (state === 'active') {
+    ctx.shadowBlur = 20;
+    ctx.shadowColor = '#fff';
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 10;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(750, y);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+}
+
+function drawLevelSelect(ctx: CanvasRenderingContext2D, selectedLevelId: string, unlockedLevelIds: string[], hoveredIndex: number | null, mousePos: { x: number, y: number }) {
+  ctx.fillStyle = '#121212';
+  ctx.fillRect(0, 0, 750, 1334);
+
+  // Parallax Background
+  const selectedLevel = LEVELS.find(l => l.id === selectedLevelId) || LEVELS[0];
+  const parallaxX = (mousePos.x - 375) * 0.05;
+  const parallaxY = (mousePos.y - 667) * 0.05;
+
+  ctx.save();
+  ctx.translate(parallaxX, parallaxY);
+  // Draw subtle background elements for parallax
+  ctx.fillStyle = 'rgba(255,255,255,0.03)';
+  for (let i = 0; i < 20; i++) {
+    ctx.beginPath();
+    ctx.arc((i * 137) % 1000 - 125, (i * 251) % 1500 - 100, 2 + (i % 3), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // Left List
+  const listW = 250;
+  ctx.fillStyle = '#1c1c1c';
+  ctx.fillRect(0, 0, listW, 1334);
+
+  LEVELS.forEach((level, i) => {
+    const isSelected = level.id === selectedLevelId;
+    const isHovered = hoveredIndex === i;
+    const isUnlocked = unlockedLevelIds.includes(level.id);
+    
+    ctx.fillStyle = isSelected ? '#455a64' : (isHovered ? '#37474f' : '#1c1c1c');
+    ctx.fillRect(0, i * 100, listW, 100);
+    
+    // Thumbnail
+    ctx.fillStyle = level.theme.bgColor;
+    ctx.fillRect(10, i * 100 + 20, 60, 60);
+    ctx.strokeStyle = level.theme.groundColor;
+    ctx.strokeRect(10, i * 100 + 20, 60, 60);
+
+    ctx.fillStyle = isUnlocked ? 'white' : '#666';
+    ctx.font = 'bold 18px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(level.name, 80, i * 100 + 45);
+    
+    ctx.fillStyle = '#999';
+    ctx.font = '14px sans-serif';
+    ctx.fillText(level.duration === 0 ? '无限' : `${Math.floor(level.duration / 60)}:00`, 80, i * 100 + 75);
+
+    if (!isUnlocked) {
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(0, i * 100, listW, 100);
+      ctx.fillStyle = 'white';
+      ctx.font = '20px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('🔒', listW / 2, i * 100 + 60);
+    }
+  });
+
+  // Right Preview
+  const isUnlocked = unlockedLevelIds.includes(selectedLevel.id);
+  const previewX = listW;
+  const previewW = 750 - listW;
+
+  // Gradient Background
+  const grad = ctx.createLinearGradient(previewX, 0, 750, 1334);
+  grad.addColorStop(0, selectedLevel.theme.bgColor);
+  grad.addColorStop(1, '#000');
+  ctx.fillStyle = grad;
+  ctx.fillRect(previewX, 0, previewW, 1334);
+
+  // Info Panel
+  ctx.textAlign = 'center';
+  ctx.fillStyle = 'white';
+  ctx.font = 'bold 36px sans-serif';
+  ctx.fillText(selectedLevel.name, previewX + previewW / 2, 100);
+
+  ctx.fillStyle = '#ccc';
+  ctx.font = '18px sans-serif';
+  const lines = selectedLevel.description.match(/.{1,15}/g) || [];
+  lines.forEach((line, i) => {
+    ctx.fillText(line, previewX + previewW / 2, 160 + i * 25);
+  });
+
+  // Special Rules
+  if (selectedLevel.specialRules) {
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 20px sans-serif';
+    ctx.fillText('特殊机制', previewX + previewW / 2, 300);
+    ctx.fillStyle = 'white';
+    ctx.font = '16px sans-serif';
+    selectedLevel.specialRules.forEach((rule, i) => {
+      ctx.fillText(`• ${rule}`, previewX + previewW / 2, 330 + i * 30);
+    });
+  }
+
+  // Unlock Condition
+  if (!isUnlocked) {
+    ctx.fillStyle = '#ff5252';
+    ctx.font = 'bold 18px sans-serif';
+    ctx.fillText(`解锁条件: ${selectedLevel.unlockCondition}`, previewX + previewW / 2, 500);
+  } else {
+    // Start Button
+    const btnW = 250;
+    const btnH = 80;
+    const btnX = previewX + (previewW - btnW) / 2;
+    const btnY = 600;
+    const isBtnHovered = hoveredIndex === 1000;
+    
+    drawRoundRect(ctx, btnX, btnY, btnW, btnH, 40, isBtnHovered ? '#4caf50' : '#388e3c', 'white');
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold 24px sans-serif';
+    ctx.fillText('开始挑战', previewX + previewW / 2, btnY + 50);
+  }
+
+  // Back Button
+  const backW = 150;
+  const backH = 50;
+  const backX = previewX + (previewW - backW) / 2;
+  const backY = 1334 - 100;
+  const isBackHovered = hoveredIndex === 1001;
+  drawRoundRect(ctx, backX, backY, backW, backH, 25, isBackHovered ? '#333' : '#222', 'white');
+  ctx.fillStyle = 'white';
+  ctx.font = 'bold 18px sans-serif';
+  ctx.fillText('返回', previewX + previewW / 2, backY + 32);
+}
+
 const GAME_WIDTH = 750;
 
 const GAME_HEIGHT = 1334;
 
 export default function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [gameState, setGameState] = useState<'START' | 'PLAYING' | 'LEVEL_UP' | 'GAME_OVER' | 'VICTORY' | 'REVIVE' | 'CHARACTER_SELECT'>('START');
+  const [gameState, setGameState] = useState<'START' | 'PLAYING' | 'LEVEL_UP' | 'GAME_OVER' | 'VICTORY' | 'REVIVE' | 'CHARACTER_SELECT' | 'LEVEL_SELECT' | 'PAUSED' | 'ACHIEVEMENTS'>('START');
   const [score, setScore] = useState(0);
   const [timer, setTimer] = useState(0);
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  const [menuBtnState, setMenuBtnState] = useState<'normal' | 'pressed'>('normal');
   const [totalKills, setTotalKills] = useState(0);
   const [bossKilled, setBossKilled] = useState(false);
   const [tutorialHint, setTutorialHint] = useState<{ text: string, life: number } | null>(null);
@@ -229,8 +535,77 @@ export default function App() {
   const [selectedCharacterId, setSelectedCharacterId] = useState('survivor');
   const [unlockedCharacterIds, setUnlockedCharacterIds] = useState(['survivor']);
   const [totalKillsEver, setTotalKillsEver] = useState(0);
+  const [totalGemsEver, setTotalGemsEver] = useState(0);
   const [lastShieldTime, setLastShieldTime] = useState(0);
   const [lastTimeStasisTime, setLastTimeStasisTime] = useState(0);
+
+  const [currentLevelId, setCurrentLevelId] = useState('city');
+  const [selectedLevelId, setSelectedLevelId] = useState('city');
+  const [unlockedLevelIds, setUnlockedLevelIds] = useState(['city']);
+  const [totalSurvivalTime, setTotalSurvivalTime] = useState(0);
+  const [lavaHeight, setLavaHeight] = useState(0);
+  const [laserTraps, setLaserTraps] = useState<LaserTrap[]>([]);
+  const [platforms, setPlatforms] = useState<Platform[]>([]);
+  const [gravityCenter, setGravityCenter] = useState<{ x: number, y: number } | null>(null);
+  const [isMuted, setIsMuted] = useState(false);
+  const [unlockedAchievements, setUnlockedAchievements] = useState<string[]>([]);
+  const [achievementNotification, setAchievementNotification] = useState<string | null>(null);
+
+  // Load data
+  useEffect(() => {
+    const savedChars = localStorage.getItem('unlockedCharacters');
+    if (savedChars) setUnlockedCharacterIds(JSON.parse(savedChars));
+    const savedLevels = localStorage.getItem('unlockedLevels');
+    if (savedLevels) setUnlockedLevelIds(JSON.parse(savedLevels));
+    const savedAchievements = localStorage.getItem('unlockedAchievements');
+    if (savedAchievements) setUnlockedAchievements(JSON.parse(savedAchievements));
+    const savedTotalKills = localStorage.getItem('totalKillsEver');
+    if (savedTotalKills) setTotalKillsEver(parseInt(savedTotalKills));
+    const savedTotalGems = localStorage.getItem('totalGemsEver');
+    if (savedTotalGems) setTotalGemsEver(parseInt(savedTotalGems));
+  }, []);
+
+  // Save data
+  useEffect(() => {
+    localStorage.setItem('unlockedCharacters', JSON.stringify(unlockedCharacterIds));
+  }, [unlockedCharacterIds]);
+
+  useEffect(() => {
+    localStorage.setItem('unlockedLevels', JSON.stringify(unlockedLevelIds));
+  }, [unlockedLevelIds]);
+
+  useEffect(() => {
+    localStorage.setItem('unlockedAchievements', JSON.stringify(unlockedAchievements));
+  }, [unlockedAchievements]);
+
+  useEffect(() => {
+    localStorage.setItem('totalKillsEver', totalKillsEver.toString());
+  }, [totalKillsEver]);
+
+  useEffect(() => {
+    localStorage.setItem('totalGemsEver', totalGemsEver.toString());
+  }, [totalGemsEver]);
+
+  const unlockAchievement = (id: string) => {
+    if (!unlockedAchievements.includes(id)) {
+      setUnlockedAchievements(prev => [...prev, id]);
+      const achievement = ACHIEVEMENTS.find(a => a.id === id);
+      if (achievement) {
+        setAchievementNotification(achievement.name);
+        setTimeout(() => setAchievementNotification(null), 3000);
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (gameState === 'START' || gameState === 'CHARACTER_SELECT' || gameState === 'LEVEL_SELECT') {
+      audioService.playBGM('menu');
+    } else if (gameState === 'PLAYING') {
+      audioService.playBGM('game');
+    } else if (gameState === 'GAME_OVER' || gameState === 'VICTORY') {
+      audioService.stopBGM();
+    }
+  }, [gameState]);
 
   // Game Entities (Refs for performance in game loop)
   const playerRef = useRef<Player>({
@@ -263,16 +638,57 @@ export default function App() {
 
   const getCurrentPhase = (timeMs: number) => {
     const s = timeMs / 1000;
+    const level = LEVELS.find(l => l.id === currentLevelId) || LEVELS[0];
+    const duration = level.duration;
+
+    if (currentLevelId === 'void') {
+      if (s < 30) return 'tutorial';
+      if (s < 120) return 'buildup';
+      return 'climax';
+    }
+
     if (s < 30) return 'tutorial';
-    if (s < 90) return 'buildup';
-    if (s < 150) return 'climax';
+    if (s < duration - 60) return 'buildup';
+    if (s < duration - 30) return 'climax';
     return 'boss';
+  };
+
+  const returnToMainMenu = () => {
+    setGameState('START');
+    enemiesRef.current = [];
+    projectilesRef.current = [];
+    xpGemsRef.current = [];
+    setGameItems([]);
+    setKillHints([]);
+    setScore(0);
+    setTimer(0);
+    setTotalKills(0);
+    setBossKilled(false);
   };
 
   const resetGame = (forceUnlock?: boolean) => {
     const unlocked = forceUnlock !== undefined ? forceUnlock : isShadowWalkerUnlocked;
     const char = CHARACTERS.find(c => c.id === selectedCharacterId) || CHARACTERS[0];
+    const level = LEVELS.find(l => l.id === selectedLevelId) || LEVELS[0];
     
+    setCurrentLevelId(level.id);
+    setLavaHeight(0);
+    setLaserTraps([]);
+    setPlatforms([]);
+    setGravityCenter(level.id === 'void' ? { x: GAME_WIDTH / 2, y: GAME_HEIGHT / 2 } : null);
+
+    if (level.id === 'volcano') {
+      const newPlatforms: Platform[] = [];
+      for (let i = 0; i < 3; i++) {
+        newPlatforms.push({
+          x: 150 + Math.random() * (GAME_WIDTH - 300),
+          y: 300 + Math.random() * (GAME_HEIGHT - 600),
+          radius: 80
+        });
+      }
+      setPlatforms(newPlatforms);
+    }
+
     playerRef.current = {
       id: 'player',
       characterId: char.id,
@@ -283,7 +699,7 @@ export default function App() {
       speed: 4 * char.stats.speed * (unlocked && char.id === 'survivor' ? 1.1 : 1),
       xp: 0,
       level: 1,
-      xpToNextLevel: 80,
+      xpToNextLevel: 100,
       skills: [JSON.parse(JSON.stringify(SKILLS.find(s => s.type === char.initialWeapon) || SKILLS[0]))],
       attackRange: 300,
       magnetRange: 100,
@@ -329,10 +745,11 @@ export default function App() {
 
     const timeS = timer / 1000;
     const phase = getCurrentPhase(timer);
+    const level = LEVELS.find(l => l.id === currentLevelId) || LEVELS[0];
     
     let type: Enemy['type'] = 'TRIANGLE';
     let hp = 20;
-    let speed = 1.6; // ~100px/s
+    let speed = 1.6;
     let radius = 15;
     let color = '#d32f2f';
     let xpValue = 20;
@@ -340,24 +757,94 @@ export default function App() {
 
     if (typeOverride) {
       type = typeOverride;
-    } else if (phase === 'buildup') {
-      type = Math.random() > 0.7 ? 'DIAMOND' : 'TRIANGLE';
-    } else if (phase === 'climax') {
-      const r = Math.random();
-      if (r < 0.4) type = 'TRIANGLE';
-      else if (r < 0.75) type = 'DIAMOND';
-      else type = 'CIRCLE';
+    } else {
+      const levelIndex = LEVELS.findIndex(l => l.id === currentLevelId);
+      const difficultyMult = 1 + levelIndex * 0.2; // 20% harder per level
+      
+      if (currentLevelId === 'city') {
+        if (phase === 'buildup') {
+          const r = Math.random();
+          if (r > 0.9) type = 'COMMANDER';
+          else if (r > 0.7) type = 'DIAMOND';
+          else type = 'TRIANGLE';
+        } else if (phase === 'climax') {
+          const r = Math.random();
+          if (r < 0.3) type = 'TRIANGLE';
+          else if (r < 0.5) type = 'DIAMOND';
+          else if (r < 0.7) type = 'CIRCLE';
+          else if (r < 0.85) type = 'CHARGER';
+          else type = 'SHIELD_GENERATOR';
+        }
+      } else if (currentLevelId === 'neon') {
+        const r = Math.random();
+        if (r < 0.4) type = 'EXPERIMENT';
+        else if (r < 0.7) type = 'DIAMOND';
+        else if (r < 0.9) type = 'CHARGER';
+        else type = 'SHIELD_GENERATOR';
+        if (phase === 'climax' && Math.random() > 0.8) isElite = true;
+      } else if (currentLevelId === 'volcano') {
+        const r = Math.random();
+        if (r < 0.5) type = 'FIRE_SPIRIT';
+        else if (r < 0.8) type = 'MAGMA_WORM';
+        else type = 'STAR';
+        if (phase === 'climax' && Math.random() > 0.8) isElite = true;
+      } else if (currentLevelId === 'void') {
+        const r = Math.random();
+        if (r < 0.2) type = 'VOID_WALKER';
+        else if (r < 0.4) type = 'COMMANDER';
+        else if (r < 0.6) type = 'STAR';
+        else if (r < 0.8) type = 'EXPERIMENT';
+        else type = 'FIRE_SPIRIT';
+      } else if (currentLevelId === 'boss_rush') {
+        // Boss rush handles spawning differently usually, but let's add some fodder
+        type = Math.random() > 0.5 ? 'STAR' : 'COMMANDER';
+      }
+
     }
 
     if (type === 'DIAMOND') {
       hp = 15; speed = 2.5; color = '#1976d2'; radius = 15; xpValue = 25;
     } else if (type === 'CIRCLE') {
       hp = 50; speed = 1.0; color = '#388e3c'; radius = 18; xpValue = 35;
+    } else if (type === 'EXPERIMENT') {
+      hp = isElite ? 150 : 40; speed = 1.2; color = isElite ? '#7b1fa2' : '#00bcd4'; radius = isElite ? 30 : 20; xpValue = isElite ? 100 : 30;
+    } else if (type === 'FIRE_SPIRIT') {
+      hp = 30; speed = 2.0; color = '#ff5722'; radius = 15; xpValue = 25;
+    } else if (type === 'MAGMA_WORM') {
+      hp = 60; speed = 0.8; color = '#ff9800'; radius = 20; xpValue = 40;
+    } else if (type === 'VOID_WALKER') {
+      hp = 200; speed = 1.5; color = '#000000'; radius = 25; xpValue = 150; isElite = true;
     } else if (type === 'STAR') {
       hp = 100; speed = 1.3; color = '#fbc02d'; radius = 25; xpValue = 150; isElite = true;
     } else if (type === 'BOSS') {
       hp = 500; speed = 1.3; color = '#7b1fa2'; radius = 80; xpValue = 500;
-      x = GAME_WIDTH / 2; y = -100; // Boss entry
+      x = GAME_WIDTH / 2; y = -100;
+    } else if (type === 'SHIELD_GENERATOR') {
+      hp = 80; speed = 1.0; color = '#00bcd4'; radius = 22; xpValue = 50;
+    } else if (type === 'CHARGER') {
+      hp = 40; speed = 1.8; color = '#ff1744'; radius = 18; xpValue = 40;
+    } else if (type === 'COMMANDER') {
+      hp = 120; speed = 1.2; color = '#ffeb3b'; radius = 25; xpValue = 100; isElite = true;
+    }
+
+    // Apply difficulty multiplier based on level index
+    const levelIndex = LEVELS.findIndex(l => l.id === currentLevelId);
+    const difficultyMult = 1 + levelIndex * 0.2; // 20% harder per level
+    
+    if (type !== 'BOSS') {
+      hp *= difficultyMult;
+      speed *= (1 + levelIndex * 0.05);
+      xpValue *= (1 + levelIndex * 0.1);
+    } else {
+      // Bosses also scale but slightly less
+      hp *= (1 + levelIndex * 0.1);
+    }
+
+    // Void Rift scaling
+    if (currentLevelId === 'void') {
+      const minutes = timeS / 60;
+      hp *= Math.pow(1.1, minutes);
+      speed *= Math.pow(1.05, minutes);
     }
 
     const enemy: Enemy = {
@@ -374,7 +861,11 @@ export default function App() {
       isElite,
       sprintTimer: 0,
       shootTimer: 0,
-      phase: 'normal'
+      phase: 'normal',
+      wormSegments: type === 'MAGMA_WORM' ? [{ x, y }, { x, y }, { x, y }] : undefined,
+      teleportTimer: type === 'VOID_WALKER' ? 120 : undefined,
+      chargeTimer: type === 'CHARGER' ? 0 : undefined,
+      isCharging: type === 'CHARGER' ? false : undefined,
     };
     enemiesRef.current.push(enemy);
   }, [timer]);
@@ -402,6 +893,7 @@ export default function App() {
     const dir = { x: dist > 0 ? dx / dist : 1, y: dist > 0 ? dy / dist : 0 };
 
     if (type === WeaponType.KNIFE) {
+      audioService.playShoot();
       const count = 1 + Math.floor(level / 2);
       for (let i = 0; i < count; i++) {
         const angleOffset = (i - (count - 1) / 2) * 0.2;
@@ -423,6 +915,7 @@ export default function App() {
         });
       }
     } else if (type === WeaponType.FIREBALL) {
+      audioService.playShoot();
       projectilesRef.current.push({
         id: Math.random().toString(),
         pos: { ...player.pos },
@@ -436,6 +929,7 @@ export default function App() {
         explosionRadius: 80 + level * 20,
       });
     } else if (type === WeaponType.LIGHTNING) {
+      audioService.playLightning();
       const damage = 15 + level * 8;
       if (nearest) {
         nearest.hp -= damage;
@@ -447,11 +941,12 @@ export default function App() {
           radius: 20,
           type: WeaponType.LIGHTNING,
           pierce: 0,
-          lifeTime: 10,
+          lifeTime: 20,
           color: '#eab308',
         });
       }
     } else if (type === WeaponType.HOMING) {
+      audioService.playShoot();
       const count = level >= 2 ? 2 : 1;
       for (let i = 0; i < count; i++) {
         projectilesRef.current.push({
@@ -467,6 +962,7 @@ export default function App() {
         });
       }
     } else if (type === WeaponType.SPIKE) {
+      audioService.playShoot();
       let spikePos = { x: Math.random() * GAME_WIDTH, y: Math.random() * GAME_HEIGHT };
       let attempts = 0;
       while (attempts < 10) {
@@ -484,6 +980,7 @@ export default function App() {
         damage: 25,
       });
     } else if (type === WeaponType.BOMB) {
+      audioService.playShoot();
       const flightTime = 48; // 0.8s
       const targetPos = nearest ? { ...nearest.pos } : { x: player.pos.x + dir.x * 200, y: player.pos.y + dir.y * 200 };
       const vx = (targetPos.x - player.pos.x) / flightTime;
@@ -505,11 +1002,18 @@ export default function App() {
   };
 
   const update = useCallback(() => {
-    if (gameState !== 'PLAYING') return;
+    setKillHints(prev => prev.map(h => ({ ...h, y: h.y - 0.5, life: h.life - 1 })).filter(h => h.life > 0));
+
+    if (gameState !== 'PLAYING') {
+      return;
+    }
 
     const player = playerRef.current;
     const now = Date.now();
     let phase = getCurrentPhase(timer);
+
+    // Clear shields at start of frame
+    enemiesRef.current.forEach(e => e.shieldedBy = undefined);
 
     // Passive: Sprint
     let currentSpeed = player.speed;
@@ -520,8 +1024,54 @@ export default function App() {
     // Player Movement
     player.pos.x += joystickDir.current.x * currentSpeed;
     player.pos.y += joystickDir.current.y * currentSpeed;
+
+    // Level Specific Logic: Gravity
+    if (currentLevelId === 'void' && gravityCenter) {
+      const dx = gravityCenter.x - player.pos.x;
+      const dy = gravityCenter.y - player.pos.y;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      if (d > 0) {
+        const force = 0.5 * (1 - Math.min(1, d / 400));
+        player.pos.x += (dx / d) * force;
+        player.pos.y += (dy / d) * force;
+      }
+    }
+
     player.pos.x = Math.max(0, Math.min(GAME_WIDTH, player.pos.x));
     player.pos.y = Math.max(0, Math.min(GAME_HEIGHT, player.pos.y));
+
+    // Level Specific Logic: Lava
+    if (currentLevelId === 'volcano') {
+      setLavaHeight(prev => Math.min(GAME_HEIGHT, prev + 0.1));
+      const onPlatform = platforms.some(p => 
+        player.pos.x >= p.x && player.pos.x <= p.x + p.w &&
+        player.pos.y >= p.y && player.pos.y <= p.y + p.h
+      );
+      if (player.pos.y > GAME_HEIGHT - lavaHeight && !onPlatform) {
+        player.hp -= 0.5;
+        if (Math.random() < 0.1) audioService.playHit();
+      }
+    }
+
+    // Level Specific Logic: Lasers
+    if (currentLevelId === 'neon') {
+      laserTraps.forEach(trap => {
+        trap.timer--;
+        if (trap.timer <= 0) {
+          trap.active = !trap.active;
+          trap.timer = trap.active ? 120 : 180;
+        }
+        if (trap.active) {
+          const dx = player.pos.x - trap.x;
+          const dy = player.pos.y - trap.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < player.radius + 5) {
+            player.hp -= 1;
+            if (Math.random() < 0.1) audioService.playHit();
+          }
+        }
+      });
+    }
 
     // Regen
     player.hp = Math.min(player.maxHp, player.hp + player.regenRate);
@@ -581,7 +1131,9 @@ export default function App() {
           if (d < e.radius + 20) {
             const swordCooldownKey = `sword_hit_${e.id}`;
             if (!lastAttackTime.current[swordCooldownKey] || now - lastAttackTime.current[swordCooldownKey] > 200) {
+            if (!e.shieldedBy) {
               e.hp -= 15;
+            }
               lastAttackTime.current[swordCooldownKey] = now;
             }
           }
@@ -605,7 +1157,9 @@ export default function App() {
           if (d < e.radius + spike.radius) {
             const spikeHitKey = `spike_hit_${e.id}_${spike.id}`;
             if (!lastAttackTime.current[spikeHitKey] || now - lastAttackTime.current[spikeHitKey] > 500) {
+            if (!e.shieldedBy) {
               e.hp -= spike.damage;
+            }
               lastAttackTime.current[spikeHitKey] = now;
             }
           }
@@ -660,6 +1214,67 @@ export default function App() {
       let moveSpeed = enemy.speed;
       if (player.timeStasisTimer! > 0) moveSpeed *= 0.5;
 
+      // SHIELD_GENERATOR
+      if (enemy.type === 'SHIELD_GENERATOR') {
+        enemiesRef.current.forEach(other => {
+          if (other.id !== enemy.id && other.type !== 'SHIELD_GENERATOR') {
+            const ddx = other.pos.x - enemy.pos.x;
+            const ddy = other.pos.y - enemy.pos.y;
+            const ddist = Math.sqrt(ddx * ddx + ddy * ddy);
+            if (ddist < 200) {
+              other.shieldedBy = enemy.id;
+            }
+          }
+        });
+      }
+
+      // CHARGER
+      if (enemy.type === 'CHARGER') {
+        if (!enemy.isCharging) {
+          enemy.chargeTimer = (enemy.chargeTimer || 0) + 1;
+          if (enemy.chargeTimer >= 180) { // 3s
+            enemy.isCharging = true;
+            enemy.chargeTimer = 60; // 1s charge duration
+            const cdx = player.pos.x - enemy.pos.x;
+            const cdy = player.pos.y - enemy.pos.y;
+            const cdist = Math.sqrt(cdx * cdx + cdy * cdy);
+            // @ts-ignore
+            enemy.chargeVel = { x: (cdx / cdist) * 8, y: (cdy / cdist) * 8 };
+          }
+        } else {
+          moveSpeed = 0;
+          // @ts-ignore
+          enemy.pos.x += enemy.chargeVel.x;
+          // @ts-ignore
+          enemy.pos.y += enemy.chargeVel.y;
+          enemy.chargeTimer!--;
+          if (enemy.chargeTimer <= 0) {
+            enemy.isCharging = false;
+            enemy.chargeTimer = 0;
+          }
+        }
+      }
+
+      // COMMANDER
+      if (enemy.type === 'COMMANDER') {
+        enemiesRef.current.forEach(other => {
+          if (other.id !== enemy.id) {
+            const ddx = other.pos.x - enemy.pos.x;
+            const ddy = other.pos.y - enemy.pos.y;
+            const ddist = Math.sqrt(ddx * ddx + ddy * ddy);
+            if (ddist < 70) {
+              other.buffTimer = 60;
+            }
+          }
+        });
+      }
+
+      // Apply Buffs
+      if (enemy.buffTimer! > 0) {
+        moveSpeed *= 1.5;
+        enemy.buffTimer!--;
+      }
+
       // DIAMOND Sprint
       if (enemy.type === 'DIAMOND') {
         if (dist < 200 && enemy.sprintTimer! <= 0) {
@@ -675,22 +1290,91 @@ export default function App() {
       if (enemy.type === 'CIRCLE') {
         enemy.shootTimer!++;
         if (enemy.shootTimer! >= 120) { // 2s
-          projectilesRef.current.push({
-            id: Math.random().toString(),
-            pos: { ...enemy.pos },
-            vel: { x: (dx / dist) * 3, y: (dy / dist) * 3 },
-            damage: 10,
-            radius: 6,
-            type: WeaponType.FIREBALL, // Reuse fireball for simplicity
-            pierce: 0,
-            lifeTime: 100,
-            color: '#388e3c',
-          });
+          // Burst of 3
+          for (let i = 0; i < 3; i++) {
+            setTimeout(() => {
+              const bdx = player.pos.x - enemy.pos.x;
+              const bdy = player.pos.y - enemy.pos.y;
+              const bdist = Math.sqrt(bdx * bdx + bdy * bdy);
+              projectilesRef.current.push({
+                id: Math.random().toString(),
+                pos: { ...enemy.pos },
+                vel: { x: (bdx / bdist) * 3, y: (bdy / bdist) * 3 },
+                damage: 10,
+                radius: 6,
+                type: WeaponType.FIREBALL,
+                pierce: 0,
+                lifeTime: 100,
+                color: '#388e3c',
+              });
+            }, i * 200);
+          }
           enemy.shootTimer = 0;
         }
         // Keep distance
         if (dist < 150) moveSpeed = -enemy.speed;
         else if (dist < 250) moveSpeed = 0;
+      }
+
+      // VOID_WALKER Teleport
+      if (enemy.type === 'VOID_WALKER') {
+        enemy.teleportTimer!--;
+        if (enemy.teleportTimer! <= 0) {
+          const angle = Math.random() * Math.PI * 2;
+          const dist = 150 + Math.random() * 100;
+          enemy.pos.x = player.pos.x + Math.cos(angle) * dist;
+          enemy.pos.y = player.pos.y + Math.sin(angle) * dist;
+          enemy.teleportTimer = 180;
+          // Teleport particles
+          for (let i = 0; i < 10; i++) {
+            particlesRef.current.push({
+              x: enemy.pos.x, y: enemy.pos.y,
+              vx: (Math.random() - 0.5) * 4, vy: (Math.random() - 0.5) * 4,
+              life: 20, color: '#a855f7', size: 3
+            });
+          }
+        }
+      }
+
+      // FIRE_SPIRIT Self-destruct
+      if (enemy.type === 'FIRE_SPIRIT') {
+        if (dist < 50) {
+          enemy.hp = 0; // Trigger death logic
+          player.hp -= 20;
+          audioService.playHit();
+          // Explosion particles
+          for (let i = 0; i < 15; i++) {
+            particlesRef.current.push({
+              x: enemy.pos.x, y: enemy.pos.y,
+              vx: (Math.random() - 0.5) * 10, vy: (Math.random() - 0.5) * 10,
+              life: 30, color: '#ff5722', size: 5
+            });
+          }
+        }
+      }
+
+      // MAGMA_WORM Segments
+      if (enemy.type === 'MAGMA_WORM' && enemy.wormSegments) {
+        let prev = { ...enemy.pos };
+        for (let i = 0; i < enemy.wormSegments.length; i++) {
+          const seg = enemy.wormSegments[i];
+          const sdx = prev.x - seg.x;
+          const sdy = prev.y - seg.y;
+          const sd = Math.sqrt(sdx * sdx + sdy * sdy);
+          if (sd > 20) {
+            seg.x += (sdx / sd) * (sd - 20);
+            seg.y += (sdy / sd) * (sd - 20);
+          }
+          prev = { ...seg };
+          // Collision with segments
+          const pdx = player.pos.x - seg.x;
+          const pdy = player.pos.y - seg.y;
+          const pd = Math.sqrt(pdx * pdx + pdy * pdy);
+          if (pd < player.radius + 15) {
+            player.hp -= 0.2;
+            if (Math.random() < 0.05) audioService.playHit();
+          }
+        }
       }
 
       // BOSS Logic
@@ -766,8 +1450,16 @@ export default function App() {
           }
         }
       } else {
-        enemy.pos.x += (dx / dist) * moveSpeed;
-        enemy.pos.y += (dy / dist) * moveSpeed;
+        // Flanking for TRIANGLE
+        if (enemy.type === 'TRIANGLE') {
+          const angle = Math.atan2(dy, dx);
+          const offset = Math.sin(Date.now() / 1000 + enemy.id.length) * 0.5;
+          enemy.pos.x += Math.cos(angle + offset) * moveSpeed;
+          enemy.pos.y += Math.sin(angle + offset) * moveSpeed;
+        } else {
+          enemy.pos.x += (dx / dist) * moveSpeed;
+          enemy.pos.y += (dy / dist) * moveSpeed;
+        }
       }
 
       if (dist < player.radius + enemy.radius) {
@@ -777,6 +1469,7 @@ export default function App() {
           // Small knockback or invincibility frame could go here
         } else {
           player.hp -= enemy.damage / 60;
+          if (Math.random() < 0.1) audioService.playHit();
           player.noDamageTimer = 0; // Reset Time Traveler unlock check
           if (player.hp <= 0) setGameState('REVIVE');
         }
@@ -812,11 +1505,18 @@ export default function App() {
         const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist < e.radius + p.radius) {
           if (p.type !== WeaponType.BOMB) {
-            e.hp -= p.damage;
+            if (!e.shieldedBy) {
+              e.hp -= p.damage;
+            }
             if (p.type === WeaponType.FIREBALL && p.explosionRadius) {
+              audioService.playExplosion();
               enemiesRef.current.forEach(e2 => {
                 const d2 = Math.sqrt((e2.pos.x - p.pos.x)**2 + (e2.pos.y - p.pos.y)**2);
-                if (d2 < p.explosionRadius) e2.hp -= p.damage * 0.5;
+                if (d2 < p.explosionRadius) {
+                  if (!e2.shieldedBy) {
+                    e2.hp -= p.damage * 0.5;
+                  }
+                }
               });
             }
             p.pierce--;
@@ -827,9 +1527,14 @@ export default function App() {
 
       if (p.type === WeaponType.BOMB && p.lifeTime <= 0) {
         // Explode
+        audioService.playExplosion();
         enemiesRef.current.forEach(e => {
           const d = Math.sqrt((e.pos.x - p.pos.x)**2 + (e.pos.y - p.pos.y)**2);
-          if (d < p.explosionRadius!) e.hp -= p.damage;
+          if (d < p.explosionRadius!) {
+            if (!e.shieldedBy) {
+              e.hp -= p.damage;
+            }
+          }
         });
         
         const bombSkill = player.skills.find(s => s.id === 'bomb');
@@ -859,6 +1564,35 @@ export default function App() {
     // Enemy Death & XP
     enemiesRef.current = enemiesRef.current.filter(e => {
       if (e.hp <= 0) {
+        audioService.playExplosion();
+        // Level Unlock Logic
+        if (e.type === 'BOSS') {
+          if (currentLevelId === 'city' && !unlockedLevelIds.includes('neon')) {
+            setUnlockedLevelIds(prev => [...prev, 'neon']);
+          } else if (currentLevelId === 'neon' && !unlockedLevelIds.includes('volcano')) {
+            setUnlockedLevelIds(prev => [...prev, 'volcano']);
+          } else if (currentLevelId === 'volcano' && !unlockedLevelIds.includes('void')) {
+            setUnlockedLevelIds(prev => [...prev, 'void']);
+          } else if (currentLevelId === 'void' && !unlockedLevelIds.includes('boss_rush')) {
+            setUnlockedLevelIds(prev => [...prev, 'boss_rush']);
+          }
+        }
+
+        // EXPERIMENT Splitting
+        if (e.type === 'EXPERIMENT' && !e.isSmall) {
+          for (let i = 0; i < 2; i++) {
+            enemiesRef.current.push({
+              ...e,
+              id: Math.random().toString(36),
+              hp: 20,
+              maxHp: 20,
+              radius: 12,
+              isSmall: true,
+              pos: { x: e.pos.x + (Math.random() - 0.5) * 20, y: e.pos.y + (Math.random() - 0.5) * 20 }
+            });
+          }
+        }
+
         if (player.characterId === 'shadow') {
           player.speedBoostTimer = 30; // 0.5s
           const char = CHARACTERS.find(c => c.id === 'shadow')!;
@@ -970,17 +1704,16 @@ export default function App() {
       }
 
       if (dist < player.radius + 10) {
+        audioService.playCollect();
         player.xp += gem.value;
         setKillHints(prev => [...prev, { id: Math.random().toString(), text: `+${gem.value}`, x: player.pos.x, y: player.pos.y - 20, life: 60 }]);
         if (player.xp >= player.xpToNextLevel) {
+          audioService.playLevelUp();
           player.xp -= player.xpToNextLevel;
           player.level++;
           
-          // XP Requirement adjustments
-          if (player.level === 2) player.xpToNextLevel = 100;
-          else if (player.level === 3) player.xpToNextLevel = 120;
-          else if (player.level >= 4 && player.level < 7) player.xpToNextLevel = 120 + (player.level - 4) * 20;
-          else player.xpToNextLevel = 160;
+          // XP Requirement adjustments: Increase by 30 for each level (tuned to reach ~half max levels by boss)
+          player.xpToNextLevel = 50 + (player.level - 1) * 30;
           
           const hasDoubleUpgrade = player.skills.some(s => s.id === 'double_upgrade');
           const optionCount = hasDoubleUpgrade ? 4 : 3;
@@ -1000,11 +1733,11 @@ export default function App() {
 
     // Spawning logic
     phase = getCurrentPhase(timer);
-    let spawnInterval = 3000;
+    let spawnInterval = 1200; // Faster base spawn rate
     if (phase === 'buildup') {
-      spawnInterval = 3000 - (timer / 1000 - 30) * 33.3;
+      spawnInterval = Math.max(600, 1200 - (timer / 1000 - 30) * 20);
     } else if (phase === 'climax') {
-      spawnInterval = 800;
+      spawnInterval = 400;
     } else if (phase === 'boss') {
       spawnInterval = Infinity;
     }
@@ -1021,7 +1754,9 @@ export default function App() {
     if (Math.floor(timer / 1000) === 120 && gameItems.length === 0) {
       setGameItems([{ id: 'clear', pos: { x: GAME_WIDTH / 2, y: GAME_HEIGHT / 2 }, type: 'CLEAR', radius: 30, rotation: 0 }]);
     }
-    if (Math.floor(timer / 1000) === 150 && !enemiesRef.current.some(e => e.type === 'BOSS') && !bossKilled) {
+    const level = LEVELS.find(l => l.id === currentLevelId) || LEVELS[0];
+    const bossSpawnTime = level.duration - 30;
+    if (Math.floor(timer / 1000) === bossSpawnTime && !enemiesRef.current.some(e => e.type === 'BOSS') && !bossKilled) {
       spawnEnemy('BOSS');
     }
 
@@ -1056,10 +1791,8 @@ export default function App() {
       if (tutorialHint.life <= 0) setTutorialHint(null);
     }
 
-    setKillHints(prev => prev.map(h => ({ ...h, y: h.y - 0.5, life: h.life - 1 })).filter(h => h.life > 0));
-
     setTimer(t => t + 16);
-  }, [gameState, spawnEnemy, timer, tutorialHint, gameItems, bossKilled]);
+  }, [gameState, spawnEnemy, timer, tutorialHint, gameItems, bossKilled, mousePos]);
 
 function drawGear(ctx: CanvasRenderingContext2D, cx: number, cy: number, teeth: number, rotation: number, color: string) {
   ctx.save();
@@ -1205,6 +1938,57 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
   ctx.fillStyle = '#4caf50';
   ctx.fillRect(bx, by, barW * (player.hp / player.maxHp), barH);
 }
+
+  const drawAchievements = (ctx: CanvasRenderingContext2D, unlockedIds: string[], hoveredIdx: number | null) => {
+    ctx.fillStyle = '#121212';
+    ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold 48px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('成就系统', GAME_WIDTH / 2, 80);
+
+    ACHIEVEMENTS.forEach((ach, i) => {
+      const isUnlocked = unlockedIds.includes(ach.id);
+      const x = 50;
+      const y = 150 + i * 120;
+      const w = GAME_WIDTH - 100;
+      const h = 100;
+
+      drawRoundRect(ctx, x, y, w, h, 15, isUnlocked ? '#1e293b' : '#111', isUnlocked ? '#4f46e5' : '#333');
+      
+      ctx.font = '40px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(ach.icon, x + 20, y + 65);
+
+      ctx.fillStyle = isUnlocked ? 'white' : '#666';
+      ctx.font = 'bold 24px sans-serif';
+      ctx.fillText(ach.name, x + 100, y + 40);
+
+      ctx.fillStyle = isUnlocked ? '#ccc' : '#444';
+      ctx.font = '18px sans-serif';
+      ctx.fillText(ach.description, x + 100, y + 75);
+
+      if (isUnlocked) {
+        ctx.fillStyle = '#4ade80';
+        ctx.font = 'bold 16px sans-serif';
+        ctx.textAlign = 'right';
+        ctx.fillText('已达成', x + w - 20, y + 55);
+      }
+    });
+
+    // Back Button
+    const btnW = 200;
+    const btnH = 60;
+    const btnX = (GAME_WIDTH - btnW) / 2;
+    const btnY = GAME_HEIGHT - 100;
+    const isHovered = hoveredIdx === 1002;
+    drawRoundRect(ctx, btnX, btnY, btnW, btnH, 30, isHovered ? '#333' : '#222', 'white');
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold 22px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('返回', GAME_WIDTH / 2, btnY + 38);
+  };
 
   const drawBoss = (ctx: CanvasRenderingContext2D, enemy: Enemy) => {
     const { x, y } = enemy.pos;
@@ -1413,6 +2197,16 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
       return;
     }
 
+    if (gameState === 'ACHIEVEMENTS') {
+      drawAchievements(ctx, unlockedAchievements, hoveredIndex);
+      return;
+    }
+
+    if (gameState === 'LEVEL_SELECT') {
+      drawLevelSelect(ctx, selectedLevelId, unlockedLevelIds, hoveredIndex, mousePos);
+      return;
+    }
+
     if (gameState === 'START') {
       ctx.fillStyle = 'rgba(0,0,0,0.8)';
       ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
@@ -1447,20 +2241,126 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
       ctx.fillStyle = 'white';
       ctx.font = 'bold 28px sans-serif';
       ctx.fillText('选择角色', GAME_WIDTH / 2, charY + 45);
+
+      // Level Select Button
+      const lvlW = 240;
+      const lvlH = 70;
+      const lvlX = (GAME_WIDTH - lvlW) / 2;
+      const lvlY = GAME_HEIGHT / 2 + 180;
+      const isLvlHovered = hoveredIndex === 12;
+      drawRoundRect(ctx, lvlX, lvlY, lvlW, lvlH, 35, isLvlHovered ? '#1e293b' : 'rgba(255,255,255,0.1)', 'white');
+      ctx.fillStyle = 'white';
+      ctx.font = 'bold 28px sans-serif';
+      ctx.fillText('选择关卡', GAME_WIDTH / 2, lvlY + 45);
+
+      // Achievements Button
+      const achW = 240;
+      const achH = 70;
+      const achX = (GAME_WIDTH - achW) / 2;
+      const achY = GAME_HEIGHT / 2 + 280;
+      const isAchHovered = hoveredIndex === 13;
+      drawRoundRect(ctx, achX, achY, achW, achH, 35, isAchHovered ? '#1e293b' : 'rgba(255,255,255,0.1)', 'white');
+      ctx.fillStyle = 'white';
+      ctx.font = 'bold 28px sans-serif';
+      ctx.fillText('成就系统', GAME_WIDTH / 2, achY + 45);
       return;
     }
 
     const player = playerRef.current;
     ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
 
-    ctx.strokeStyle = 'rgba(255,255,255,0.03)';
-    ctx.lineWidth = 1;
-    for (let i = 0; i < GAME_WIDTH; i += 50) {
-      ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, GAME_HEIGHT); ctx.stroke();
+    // Draw Level Background
+    const level = LEVELS.find(l => l.id === currentLevelId) || LEVELS[0];
+    ctx.fillStyle = level.theme.bgColor;
+    ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+    // Draw Ground Elements
+    if (currentLevelId === 'city') {
+      ctx.strokeStyle = level.theme.groundColor;
+      ctx.lineWidth = 1;
+      for (let i = 0; i < GAME_WIDTH; i += 50) {
+        ctx.beginPath();
+        ctx.moveTo(i, 0);
+        ctx.lineTo(i, GAME_HEIGHT);
+        ctx.stroke();
+      }
+      for (let i = 0; i < GAME_HEIGHT; i += 50) {
+        ctx.beginPath();
+        ctx.moveTo(0, i);
+        ctx.lineTo(GAME_WIDTH, i);
+        ctx.stroke();
+      }
+      // Buildings
+      ctx.fillStyle = level.theme.decorColor;
+      for (let i = 0; i < 5; i++) {
+        ctx.fillRect(i * 150 + 20, GAME_HEIGHT - 200 - (i % 3) * 50, 100, 400);
+      }
+    } else if (currentLevelId === 'neon') {
+      const pulse = (Math.sin(Date.now() / 500) + 1) / 2;
+      ctx.strokeStyle = `rgba(0, 188, 212, ${0.05 + pulse * 0.05})`;
+      ctx.lineWidth = 1;
+      for (let i = 0; i < GAME_WIDTH; i += 60) {
+        ctx.beginPath();
+        ctx.moveTo(i, 0);
+        ctx.lineTo(i, GAME_HEIGHT);
+        ctx.stroke();
+      }
+      for (let i = 0; i < GAME_HEIGHT; i += 60) {
+        ctx.beginPath();
+        ctx.moveTo(0, i);
+        ctx.lineTo(GAME_WIDTH, i);
+        ctx.stroke();
+      }
+      // Laser beams (visual only)
+      ctx.strokeStyle = 'rgba(0, 188, 212, 0.1)';
+      ctx.lineWidth = 4;
+      [100, 300, 500, 700].forEach(lx => {
+        ctx.beginPath();
+        ctx.moveTo(lx, 0);
+        ctx.lineTo(lx, GAME_HEIGHT);
+        ctx.stroke();
+      });
+    } else if (currentLevelId === 'volcano') {
+      // Lava cracks
+      ctx.strokeStyle = `rgba(255, 87, 34, 0.4)`;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(100, 100); ctx.lineTo(200, 300); ctx.lineTo(150, 500);
+      ctx.stroke();
+      // Lava
+      drawLava(ctx, lavaHeight);
+      // Platforms
+      platforms.forEach(p => drawPlatform(ctx, p.x, p.y, p.radius));
+    } else if (currentLevelId === 'void') {
+      // Stars
+      ctx.fillStyle = 'white';
+      for (let i = 0; i < 50; i++) {
+        const opacity = (Math.sin(Date.now() / 1000 + i) + 1) / 2;
+        ctx.globalAlpha = opacity;
+        ctx.fillRect((i * 123) % GAME_WIDTH, (i * 456) % GAME_HEIGHT, 2, 2);
+      }
+      ctx.globalAlpha = 1;
+      // Vortex
+      drawVortex(ctx, GAME_WIDTH / 2, GAME_HEIGHT / 2);
+    } else if (currentLevelId === 'boss_rush') {
+      // Checkerboard
+      const size = 100;
+      for (let i = 0; i < GAME_WIDTH; i += size) {
+        for (let j = 0; j < GAME_HEIGHT; j += size) {
+          ctx.fillStyle = (Math.floor(i / size) + Math.floor(j / size)) % 2 === 0 ? '#1a1a1a' : '#2a2a2a';
+          ctx.fillRect(i, j, size, size);
+          ctx.strokeStyle = 'rgba(255, 215, 0, 0.1)';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(i, j, size, size);
+        }
+      }
     }
-    for (let i = 0; i < GAME_HEIGHT; i += 50) {
-      ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(GAME_WIDTH, i); ctx.stroke();
-    }
+
+    // Draw Laser Traps
+    laserTraps.forEach(trap => {
+      const progress = trap.timer / (trap.state === 'warning' ? 60 : 180);
+      drawLaser(ctx, trap.y, trap.state, progress);
+    });
 
     // Ground Spikes
     groundSpikesRef.current.forEach(spike => {
@@ -1507,20 +2407,23 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
 
     projectilesRef.current.forEach(p => {
       if (p.type === WeaponType.LIGHTNING) {
-        ctx.strokeStyle = '#9c27b0';
-        ctx.lineWidth = 3;
+        ctx.strokeStyle = '#00ffff';
+        ctx.lineWidth = 4;
         ctx.beginPath();
         ctx.moveTo(player.pos.x, player.pos.y);
-        const segments = 3;
+        const segments = 6;
         for (let i = 1; i <= segments; i++) {
-          const tx = player.pos.x + (p.pos.x - player.pos.x) * (i / segments) + (Math.random() - 0.5) * 10;
-          const ty = player.pos.y + (p.pos.y - player.pos.y) * (i / segments) + (Math.random() - 0.5) * 10;
+          const tx = player.pos.x + (p.pos.x - player.pos.x) * (i / segments) + (Math.random() - 0.5) * 30;
+          const ty = player.pos.y + (p.pos.y - player.pos.y) * (i / segments) + (Math.random() - 0.5) * 30;
           ctx.lineTo(tx, ty);
         }
         ctx.stroke();
         ctx.strokeStyle = 'white';
-        ctx.lineWidth = 1;
+        ctx.lineWidth = 2;
         ctx.stroke();
+        
+        // Add a flash at the target
+        drawGlow(ctx, p.pos.x, p.pos.y, 40, '#00ffff', p.lifeTime / 20);
         return;
       }
 
@@ -1598,11 +2501,32 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
         ctx.arc(e.pos.x, e.pos.y, e.radius, 0, Math.PI * 2);
       } else if (e.type === 'STAR') {
         drawPolygon(ctx, e.pos.x, e.pos.y, e.radius, 5, e.color, Date.now() / 1000);
+      } else if (e.type === 'SHIELD_GENERATOR') {
+        drawPolygon(ctx, e.pos.x, e.pos.y, e.radius, 6, e.color, Date.now() / 1000);
+        drawGlow(ctx, e.pos.x, e.pos.y, e.radius * 2, 'rgba(0, 188, 212, 0.2)', 0.5);
+      } else if (e.type === 'CHARGER') {
+        const rotation = e.isCharging ? Date.now() / 100 : 0;
+        drawPolygon(ctx, e.pos.x, e.pos.y, e.radius, 3, e.isCharging ? '#ff1744' : e.color, rotation);
+      } else if (e.type === 'COMMANDER') {
+        drawPolygon(ctx, e.pos.x, e.pos.y, e.radius, 8, e.color, Date.now() / 2000);
+        ctx.strokeStyle = 'rgba(255, 235, 59, 0.5)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(e.pos.x, e.pos.y, 70, 0, Math.PI * 2);
+        ctx.stroke();
       } else {
         ctx.rect(e.pos.x - e.radius, e.pos.y - e.radius, e.radius * 2, e.radius * 2);
       }
       ctx.closePath();
       ctx.fill();
+
+      if (e.shieldedBy) {
+        ctx.strokeStyle = '#00bcd4';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(e.pos.x, e.pos.y, e.radius + 5, 0, Math.PI * 2);
+        ctx.stroke();
+      }
       
       if (e.type !== 'BOSS') {
         ctx.fillStyle = '#333';
@@ -1632,8 +2556,21 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
 
     drawPlayer(ctx, player);
 
-    // UI: Timer
-    drawTimer(ctx, Math.max(0, Math.ceil((180000 - timer) / 1000)));
+    // UI: Top Bar (Simplified)
+    drawTopBar(ctx, timer, score, player, menuBtnState, isMuted);
+
+    // Achievement Notification
+    if (achievementNotification) {
+      const notifW = 300;
+      const notifH = 60;
+      const notifX = (GAME_WIDTH - notifW) / 2;
+      const notifY = 100;
+      drawRoundRect(ctx, notifX, notifY, notifW, notifH, 30, '#4f46e5', 'white');
+      ctx.fillStyle = 'white';
+      ctx.font = 'bold 20px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(`🏆 获得成就: ${achievementNotification}`, GAME_WIDTH / 2, notifY + 38);
+    }
 
     // UI: Tutorial Hints
     if (tutorialHint) {
@@ -1671,40 +2608,6 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
     ctx.font = 'bold 12px monospace';
     ctx.textAlign = 'right';
     ctx.fillText(`LV ${player.level}`, xpBarX + xpBarW, xpBarY + 30);
-
-    // UI: HP Bar (Player)
-    const hpBarW = 200;
-    const hpBarH = 16;
-    const hpBarX = 50;
-    const hpBarY = 120;
-    drawRoundRect(ctx, hpBarX, hpBarY, hpBarW, hpBarH, 8, 'rgba(255,255,255,0.1)', 'rgba(255,255,255,0.05)');
-    const hpProgress = player.hp / player.maxHp;
-    const hpColor = hpProgress > 0.5 ? '#4caf50' : (hpProgress > 0.2 ? '#ff9800' : '#f44336');
-    if (hpProgress > 0) {
-      drawRoundRect(ctx, hpBarX, hpBarY, hpBarW * hpProgress, hpBarH, 8, hpColor);
-    }
-    if (hpProgress < 0.2 && player.skills.some(s => s.id === 'rage')) {
-      ctx.strokeStyle = '#f44336';
-      ctx.lineWidth = 2;
-      ctx.globalAlpha = Math.sin(Date.now() / 100) * 0.5 + 0.5;
-      drawRoundRect(ctx, hpBarX - 2, hpBarY - 2, hpBarW + 4, hpBarH + 4, 10);
-      ctx.stroke();
-      ctx.globalAlpha = 1;
-    }
-
-    // UI: Sprint Countdown
-    if (timer < 30000 && player.skills.some(s => s.id === 'sprint')) {
-      ctx.fillStyle = '#facc15';
-      ctx.font = 'bold 20px sans-serif';
-      ctx.textAlign = 'left';
-      ctx.fillText(`冲刺剩余: ${Math.ceil((30000 - timer) / 1000)}s`, 50, 170);
-    }
-
-    // UI: Score
-    ctx.fillStyle = 'rgba(255,255,255,0.4)';
-    ctx.font = 'bold 24px monospace';
-    ctx.textAlign = 'right';
-    ctx.fillText(`得分: ${score}`, GAME_WIDTH - 50, 50);
 
     // UI: Character Skill Button
     if (player.characterId === 'time') {
@@ -1855,9 +2758,9 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
       ctx.textAlign = 'center';
       ctx.fillText('选择技能', GAME_WIDTH / 2, 120);
 
-      const cardW = 280;
-      const cardH = 340;
-      const spacing = 40;
+      const cardW = 220;
+      const cardH = 300;
+      const spacing = 20;
       const totalW = levelUpOptions.length <= 3 ? (cardW * levelUpOptions.length + spacing * (levelUpOptions.length - 1)) : (cardW * 2 + spacing);
       
       levelUpOptions.forEach((skill, i) => {
@@ -1927,14 +2830,16 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
         if (level < skill.maxLevel) {
           ctx.fillStyle = '#ffd700';
           ctx.font = 'italic 14px sans-serif';
-          ctx.fillText(`下一级: ${skill.nextLevelPreview}`, x + cardW/2, y + 300);
+          ctx.fillText(`下一级: ${skill.nextLevelPreview}`, x + cardW/2, y + 280);
         }
 
         ctx.restore();
       });
     }
-
-  }, [gameState, levelUpOptions, hoveredIndex]);
+    if (gameState === 'PAUSED') {
+      drawPauseMenu(ctx, hoveredIndex);
+    }
+  }, [gameState, currentLevelId, lavaHeight, platforms, laserTraps, gameItems, tutorialHint, killHints, score, timer, totalKills, isShadowWalkerUnlocked, victoryTime, levelUpOptions, hoveredIndex, mousePos, menuBtnState]);
 
   useEffect(() => {
     const loop = () => {
@@ -1990,6 +2895,7 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
     const scaleY = GAME_HEIGHT / rect.height;
     const mx = (e.clientX - rect.left) * scaleX;
     const my = (e.clientY - rect.top) * scaleY;
+    setMousePos({ x: mx, y: my });
 
     let found = null;
     if (gameState === 'START') {
@@ -2006,6 +2912,54 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
         const charY = GAME_HEIGHT / 2 + 80;
         if (mx >= charX && mx <= charX + charW && my >= charY && my <= charY + charH) {
           found = 11 as any;
+        } else {
+          const lvlW = 240;
+          const lvlH = 70;
+          const lvlX = (GAME_WIDTH - lvlW) / 2;
+          const lvlY = GAME_HEIGHT / 2 + 180;
+          if (mx >= lvlX && mx <= lvlX + lvlW && my >= lvlY && my <= lvlY + lvlH) {
+            found = 12 as any;
+          } else {
+            const achW = 240;
+            const achH = 70;
+            const achX = (GAME_WIDTH - achW) / 2;
+            const achY = GAME_HEIGHT / 2 + 280;
+            if (mx >= achX && mx <= achX + achW && my >= achY && my <= achY + achH) {
+              found = 13 as any;
+            }
+          }
+        }
+      }
+    } else if (gameState === 'ACHIEVEMENTS') {
+      const btnW = 200;
+      const btnH = 60;
+      const btnX = (GAME_WIDTH - btnW) / 2;
+      const btnY = GAME_HEIGHT - 100;
+      if (mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH) {
+        found = 1002 as any;
+      }
+    } else if (gameState === 'LEVEL_SELECT') {
+      const listW = 250;
+      if (mx < listW) {
+        const index = Math.floor(my / 100);
+        if (index < LEVELS.length) found = index as any;
+      } else {
+        // Start Button
+        const btnW = 250;
+        const btnH = 80;
+        const btnX = listW + (750 - listW - btnW) / 2;
+        const btnY = 600;
+        if (mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH) {
+          found = 1000 as any;
+        } else {
+          // Back Button
+          const backW = 150;
+          const backH = 50;
+          const backX = listW + (750 - listW - backW) / 2;
+          const backY = 1334 - 100;
+          if (mx >= backX && mx <= backX + backW && my >= backY && my <= backY + backH) {
+            found = 1001 as any;
+          }
         }
       }
     } else if (gameState === 'CHARACTER_SELECT') {
@@ -2056,6 +3010,21 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
           found = i as any;
         }
       });
+    } else if (gameState === 'PLAYING') {
+      if (mx >= 660 && mx <= 740 && my >= 15 && my <= 55) {
+        found = 500 as any;
+      }
+    } else if (gameState === 'PAUSED') {
+      const w = 400, h = 450;
+      const x = (750 - w) / 2, y = (1334 - h) / 2;
+      const btnW = 300, btnH = 60;
+      const btnX = (750 - btnW) / 2;
+      [200, 201, 202].forEach((id, i) => {
+        const btnY = y + 150 + i * 90;
+        if (mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH) {
+          found = id as any;
+        }
+      });
     } else if (gameState === 'REVIVE') {
       const btnW = 400;
       const btnH = 70;
@@ -2086,6 +3055,24 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
     setHoveredIndex(found);
   };
 
+  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = GAME_WIDTH / rect.width;
+    const scaleY = GAME_HEIGHT / rect.height;
+    const mx = (e.clientX - rect.left) * scaleX;
+    const my = (e.clientY - rect.top) * scaleY;
+
+    if (gameState === 'PLAYING' && mx >= 660 && mx <= 740 && my >= 15 && my <= 55) {
+      setMenuBtnState('pressed');
+    }
+  };
+
+  const handleMouseUp = () => {
+    setMenuBtnState('normal');
+  };
+
   const handleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -2095,11 +3082,31 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
     const mx = (e.clientX - rect.left) * scaleX;
     const my = (e.clientY - rect.top) * scaleY;
 
+    if (hoveredIndex !== null) {
+      audioService.playCollect();
+    }
+
     if (gameState === 'START' && hoveredIndex !== null) {
       if (hoveredIndex === 10) {
         resetGame();
       } else if (hoveredIndex === 11) {
         setGameState('CHARACTER_SELECT');
+      } else if (hoveredIndex === 12) {
+        setGameState('LEVEL_SELECT');
+      } else if (hoveredIndex === 13) {
+        setGameState('ACHIEVEMENTS');
+      }
+    } else if (gameState === 'ACHIEVEMENTS' && hoveredIndex !== null) {
+      if (hoveredIndex === 1002) {
+        setGameState('START');
+      }
+    } else if (gameState === 'LEVEL_SELECT' && hoveredIndex !== null) {
+      if (hoveredIndex === 1000) {
+        resetGame();
+      } else if (hoveredIndex === 1001) {
+        setGameState('START');
+      } else if (hoveredIndex < LEVELS.length) {
+        setSelectedLevelId(LEVELS[hoveredIndex].id);
       }
     } else if (gameState === 'CHARACTER_SELECT' && hoveredIndex !== null) {
       if (hoveredIndex === 100) {
@@ -2111,6 +3118,16 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
         }
       }
     } else if (gameState === 'PLAYING') {
+      if (mx >= 610 && mx <= 650 && my >= 15 && my <= 55) {
+        const newMuted = !isMuted;
+        setIsMuted(newMuted);
+        audioService.setMute(newMuted);
+        return;
+      }
+      if (hoveredIndex === 500) {
+        setGameState('PAUSED');
+        return;
+      }
       const player = playerRef.current;
       if (player.characterId === 'time') {
         const btnSize = 80;
@@ -2125,6 +3142,15 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
             setTutorialHint({ text: '时空静止！', life: 120 });
           }
         }
+      }
+    } else if (gameState === 'PAUSED' && hoveredIndex !== null) {
+      if (hoveredIndex === 200) {
+        setGameState('PLAYING');
+      } else if (hoveredIndex === 201) {
+        returnToMainMenu();
+      } else if (hoveredIndex === 202) {
+        resetGame();
+        setGameState('PLAYING');
       }
     } else if (gameState === 'LEVEL_UP' && hoveredIndex !== null) {
       handleSkillSelect(levelUpOptions[hoveredIndex]);
@@ -2162,12 +3188,17 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
           width={GAME_WIDTH}
           height={GAME_HEIGHT}
           onMouseMove={handleMouseMove}
+          onMouseDown={handleMouseDown}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
           onClick={handleClick}
           className="block"
         />
 
         {gameState === 'PLAYING' && (
-          <Joystick onMove={(dir) => joystickDir.current = dir} />
+          <div className="absolute top-[70px] left-0 right-0 bottom-0 z-10">
+            <Joystick onMove={(dir) => joystickDir.current = dir} />
+          </div>
         )}
 
         <AnimatePresence>
