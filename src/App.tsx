@@ -868,7 +868,7 @@ export default function App() {
       isCharging: type === 'CHARGER' ? false : undefined,
     };
     enemiesRef.current.push(enemy);
-  }, [timer]);
+  }, [timer, currentLevelId]);
 
   const fireWeapon = (type: WeaponType, level: number) => {
     const player = playerRef.current;
@@ -1792,7 +1792,7 @@ export default function App() {
     }
 
     setTimer(t => t + 16);
-  }, [gameState, spawnEnemy, timer, tutorialHint, gameItems, bossKilled, mousePos]);
+  }, [gameState, spawnEnemy, timer, tutorialHint, gameItems, bossKilled, mousePos, currentLevelId]);
 
 function drawGear(ctx: CanvasRenderingContext2D, cx: number, cy: number, teeth: number, rotation: number, color: string) {
   ctx.save();
@@ -2725,15 +2725,25 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
           ctx.font = '16px sans-serif';
           ctx.fillText('+10% 基础移速', cx + cardW/2, cy + 80);
           
-          const btnW = 200;
+          const btnW = 120;
           const btnH = 50;
-          const bx = cx + (cardW - btnW) / 2;
+          const bx = cx + 20;
           const by = cy + 120;
           const isHoverU = hoveredIndex === 20;
           drawRoundRect(ctx, bx, by, btnW, btnH, 25, 'white', isHoverU ? '#ffd700' : undefined);
           ctx.fillStyle = 'black';
           ctx.font = 'bold 18px sans-serif';
-          ctx.fillText('立即试用', cx + cardW/2, by + 32);
+          ctx.fillText('立即试用', bx + btnW/2, by + 32);
+
+          const backW = 120;
+          const backH = 50;
+          const backX = cx + cardW - backW - 20;
+          const backY = cy + 120;
+          const isHoverB = hoveredIndex === 21;
+          drawRoundRect(ctx, backX, backY, backW, backH, 25, 'rgba(255,255,255,0.2)', isHoverB ? 'white' : undefined);
+          ctx.fillStyle = 'white';
+          ctx.font = 'bold 18px sans-serif';
+          ctx.fillText('返回菜单', backX + backW/2, backY + 32);
           ctx.restore();
         } else {
           const btnW = 200;
@@ -3039,11 +3049,21 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
     } else if (gameState === 'VICTORY') {
       const menuY = (GAME_HEIGHT - 500) / 2;
       if (!isShadowWalkerUnlocked) {
-        const btnW = 200;
+        const cardW = 300;
+        const cx = (GAME_WIDTH - cardW) / 2;
+        const cy = menuY + 150;
+        
+        const btnW = 120;
         const btnH = 50;
-        const bx = (GAME_WIDTH - btnW) / 2;
-        const by = menuY + 150 + 120;
+        const bx = cx + 20;
+        const by = cy + 120;
         if (mx >= bx && mx <= bx + btnW && my >= by && my <= by + btnH) found = 20;
+
+        const backW = 120;
+        const backH = 50;
+        const backX = cx + cardW - backW - 20;
+        const backY = cy + 120;
+        if (mx >= backX && mx <= backX + backW && my >= backY && my <= backY + backH) found = 21;
       } else {
         const btnW = 200;
         const btnH = 50;
@@ -3171,7 +3191,7 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
         setIsShadowWalkerUnlocked(true);
         resetGame(true);
       } else if (hoveredIndex === 21) {
-        setGameState('START');
+        returnToMainMenu();
       }
       setHoveredIndex(null);
     }
