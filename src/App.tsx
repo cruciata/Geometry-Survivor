@@ -1778,7 +1778,7 @@ export default function App() {
       return true;
     }));
 
-    if (timer >= 180000) {
+    if (level.duration > 0 && timer >= level.duration * 1000) {
       setGameState('VICTORY');
       if (!unlockedCharacterIds.includes('shadow')) {
         setUnlockedCharacterIds(prev => [...prev, 'shadow']);
@@ -2697,7 +2697,8 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
         ctx.font = 'bold 18px sans-serif';
         ctx.fillText('放弃并结算', GAME_WIDTH / 2, cy + 40);
       } else if (gameState === 'VICTORY') {
-        if (!isShadowWalkerUnlocked) {
+        const isShadowUnlocked = unlockedCharacterIds.includes('shadow') || isShadowWalkerUnlocked;
+        if (!isShadowUnlocked) {
           // Unlock Card with Bounce Animation
           const elapsed = (Date.now() - victoryTime) / 1000;
           const bounce = (t: number) => {
@@ -2750,11 +2751,22 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
           const btnH = 50;
           const bx = (GAME_WIDTH - btnW) / 2;
           const by = my + 250;
-          drawRoundRect(ctx, bx, by, btnW, btnH, 25, 'white');
-          ctx.fillStyle = 'black';
+          const isHovered = hoveredIndex === 21;
+          drawRoundRect(ctx, bx, by, btnW, btnH, 25, isHovered ? 'white' : 'rgba(255,255,255,0.2)', isHovered ? undefined : 'white');
+          ctx.fillStyle = isHovered ? 'black' : 'white';
           ctx.font = 'bold 18px sans-serif';
           ctx.fillText('返回主菜单', GAME_WIDTH / 2, by + 32);
         }
+      } else if (gameState === 'GAME_OVER') {
+        const btnW = 200;
+        const btnH = 50;
+        const bx = (GAME_WIDTH - btnW) / 2;
+        const by = my + 250;
+        const isHovered = hoveredIndex === 21;
+        drawRoundRect(ctx, bx, by, btnW, btnH, 25, isHovered ? 'white' : 'rgba(255,255,255,0.2)', isHovered ? undefined : 'white');
+        ctx.fillStyle = isHovered ? 'black' : 'white';
+        ctx.font = 'bold 18px sans-serif';
+        ctx.fillText('返回主菜单', GAME_WIDTH / 2, by + 32);
       }
     }
 
@@ -3048,7 +3060,8 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
       }
     } else if (gameState === 'VICTORY') {
       const menuY = (GAME_HEIGHT - 500) / 2;
-      if (!isShadowWalkerUnlocked) {
+      const isShadowUnlocked = unlockedCharacterIds.includes('shadow') || isShadowWalkerUnlocked;
+      if (!isShadowUnlocked) {
         const cardW = 300;
         const cx = (GAME_WIDTH - cardW) / 2;
         const cy = menuY + 150;
@@ -3071,6 +3084,13 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
         const by = menuY + 250;
         if (mx >= bx && mx <= bx + btnW && my >= by && my <= by + btnH) found = 21;
       }
+    } else if (gameState === 'GAME_OVER') {
+      const menuY = (GAME_HEIGHT - 500) / 2;
+      const btnW = 200;
+      const btnH = 50;
+      const bx = (GAME_WIDTH - btnW) / 2;
+      const by = menuY + 250;
+      if (mx >= bx && mx <= bx + btnW && my >= by && my <= by + btnH) found = 21;
     }
     setHoveredIndex(found);
   };
@@ -3183,7 +3203,7 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
         playerRef.current.hp = playerRef.current.maxHp;
         setGameState('PLAYING');
       } else if (hoveredIndex === 12) {
-        setGameState('START');
+        setGameState('GAME_OVER');
       }
       setHoveredIndex(null);
     } else if (gameState === 'VICTORY' && hoveredIndex !== null) {
@@ -3191,6 +3211,11 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
         setIsShadowWalkerUnlocked(true);
         resetGame(true);
       } else if (hoveredIndex === 21) {
+        returnToMainMenu();
+      }
+      setHoveredIndex(null);
+    } else if (gameState === 'GAME_OVER' && hoveredIndex !== null) {
+      if (hoveredIndex === 21) {
         returnToMainMenu();
       }
       setHoveredIndex(null);
