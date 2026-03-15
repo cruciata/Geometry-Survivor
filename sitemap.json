@@ -1,0 +1,9 @@
+{
+  "desc": "Geometry Warrior mini program sitemap",
+  "rules": [
+    {
+      "action": "allow",
+      "page": "*"
+    }
+  ]
+}
