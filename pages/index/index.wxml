@@ -7,7 +7,7 @@
 		class="url-input"
 		type="text"
 		value="{{h5Url}}"
-		placeholder="https://your-domain.com/geometry-warrior/"
+		placeholder="https://cruciata.github.io/Geometry-Survivor/"
 		bindinput="onUrlInput"
 	/>
 
