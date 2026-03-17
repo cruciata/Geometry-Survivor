@@ -8,20 +8,12 @@
     "es6": true,
     "enhance": true,
     "postcss": true,
-    "preloadBackgroundData": false,
     "minified": true,
-    "newFeature": false,
-    "coverView": true,
-    "nodeModules": false,
-    "autoAudits": false,
-    "showShadowRootInWxmlPanel": true,
-    "scopeDataCheck": false,
-    "uglifyFileName": false,
-    "checkInvalidKey": true,
+    "newFeature": true,
+    "nodeModules": true,
     "checkSiteMap": true,
     "uploadWithSourceMap": true,
     "compileHotReLoad": false,
-    "lazyloadPlaceholderEnable": false,
     "useMultiFrameRuntime": true,
     "useApiHook": true,
     "useApiHostProcess": true,
@@ -29,28 +21,11 @@
       "ignore": [],
       "disablePlugins": [],
       "outputPath": ""
-    },
-    "enableConditionCompile": false,
-    "conditionCompile": false,
-    "useStaticResource": true,
-    "userConfirmedBundleSwitch": false,
-    "packNpmManually": false,
-    "packNpmRelationList": [],
-    "minifyWXSS": true,
-    "disableUseStrict": false,
-    "showES6CompileOption": false,
-    "useCompilerPlugins": [
-      "typescript"
-    ],
-    "minifyWXML": true
+    }
   },
-  "compileType": "miniprogram",
-  "libVersion": "2.19.4",
+  "compileType": "game",
+  "libVersion": "latest",
   "appid": "touristappid",
-  "projectname": "GeometryWarrior",
-  "condition": {},
-  "editorSetting": {
-    "tabIndent": "insertSpaces",
-    "tabSize": 2
-  }
+  "projectname": "geometric-survivor",
+  "condition": {}
 }

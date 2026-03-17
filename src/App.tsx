@@ -2187,7 +2187,7 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
   };
 
   const draw = useCallback(() => {
-    const canvas = canvasRef.current;
+    const canvas = (typeof wx !== 'undefined' ? (window as any).canvas : canvasRef.current) as HTMLCanvasElement;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -2278,6 +2278,14 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
     const level = LEVELS.find(l => l.id === currentLevelId) || LEVELS[0];
     ctx.fillStyle = level.theme.bgColor;
     ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+    // Draw Game Title (Watermark style)
+    ctx.save();
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.font = 'bold 24px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('几何战士', GAME_WIDTH / 2, 120); // Moved from 40 to 120
+    ctx.restore();
 
     // Draw Ground Elements
     if (currentLevelId === 'city') {
@@ -2915,11 +2923,11 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
+    const canvas = (typeof wx !== 'undefined' ? (window as any).canvas : canvasRef.current) as HTMLCanvasElement;
     if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = GAME_WIDTH / rect.width;
-    const scaleY = GAME_HEIGHT / rect.height;
+    const rect = canvas.getBoundingClientRect ? canvas.getBoundingClientRect() : { left: 0, top: 0, width: canvas.width, height: canvas.height };
+    const scaleX = GAME_WIDTH / (rect.width || canvas.width);
+    const scaleY = GAME_HEIGHT / (rect.height || canvas.height);
     const mx = (e.clientX - rect.left) * scaleX;
     const my = (e.clientY - rect.top) * scaleY;
     setMousePos({ x: mx, y: my });
@@ -2969,7 +2977,7 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
       const listW = 250;
       if (mx < listW) {
         const index = Math.floor(my / 100);
-        if (index < LEVELS.length) found = index as any;
+        if (index >= 0 && index < LEVELS.length) found = index as any;
       } else {
         // Start Button
         const btnW = 250;
@@ -3101,11 +3109,11 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
   };
 
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
+    const canvas = (typeof wx !== 'undefined' ? (window as any).canvas : canvasRef.current) as HTMLCanvasElement;
     if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = GAME_WIDTH / rect.width;
-    const scaleY = GAME_HEIGHT / rect.height;
+    const rect = canvas.getBoundingClientRect ? canvas.getBoundingClientRect() : { left: 0, top: 0, width: canvas.width, height: canvas.height };
+    const scaleX = GAME_WIDTH / (rect.width || canvas.width);
+    const scaleY = GAME_HEIGHT / (rect.height || canvas.height);
     const mx = (e.clientX - rect.left) * scaleX;
     const my = (e.clientY - rect.top) * scaleY;
 
@@ -3119,11 +3127,11 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
   };
 
   const handleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
+    const canvas = (typeof wx !== 'undefined' ? (window as any).canvas : canvasRef.current) as HTMLCanvasElement;
     if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = GAME_WIDTH / rect.width;
-    const scaleY = GAME_HEIGHT / rect.height;
+    const rect = canvas.getBoundingClientRect ? canvas.getBoundingClientRect() : { left: 0, top: 0, width: canvas.width, height: canvas.height };
+    const scaleX = GAME_WIDTH / (rect.width || canvas.width);
+    const scaleY = GAME_HEIGHT / (rect.height || canvas.height);
     const mx = (e.clientX - rect.left) * scaleX;
     const my = (e.clientY - rect.top) * scaleY;
 
@@ -3150,13 +3158,13 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
         resetGame();
       } else if (hoveredIndex === 1001) {
         setGameState('START');
-      } else if (hoveredIndex < LEVELS.length) {
+      } else if (hoveredIndex >= 0 && hoveredIndex < LEVELS.length) {
         setSelectedLevelId(LEVELS[hoveredIndex].id);
       }
     } else if (gameState === 'CHARACTER_SELECT' && hoveredIndex !== null) {
       if (hoveredIndex === 100) {
         setGameState('START');
-      } else if (hoveredIndex < CHARACTERS.length) {
+      } else if (hoveredIndex >= 0 && hoveredIndex < CHARACTERS.length) {
         const char = CHARACTERS[hoveredIndex];
         if (unlockedCharacterIds.includes(char.id)) {
           setSelectedCharacterId(char.id);

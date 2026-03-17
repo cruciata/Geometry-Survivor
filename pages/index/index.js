@@ -108,6 +108,14 @@ Page({
     // 绘制背景
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, this.width, this.height);
+
+    // 绘制常驻标题 (游玩界面显示)
+    ctx.save();
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.2)'; // 半透明白色，避免干扰游戏
+    ctx.font = 'bold 20px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('几何战士', this.width / 2, 100); // Moved from 40 to 100
+    ctx.restore();
     
     // 绘制玩家
     ctx.beginPath();
