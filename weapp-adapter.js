@@ -1,5 +1,6 @@
 // 这是一个简化的适配器，用于在微信小游戏环境中模拟浏览器基础 API
 if (typeof wx !== 'undefined') {
+  const global = (typeof GameGlobal !== 'undefined' ? GameGlobal : {}) as any;
   const canvas = wx.createCanvas();
   const _requestAnimationFrame = (typeof requestAnimationFrame !== 'undefined' ? requestAnimationFrame : (typeof canvas.requestAnimationFrame !== 'undefined' ? canvas.requestAnimationFrame : (fn => setTimeout(fn, 16))));
   const _cancelAnimationFrame = (typeof cancelAnimationFrame !== 'undefined' ? cancelAnimationFrame : (typeof canvas.cancelAnimationFrame !== 'undefined' ? canvas.cancelAnimationFrame : (id => clearTimeout(id))));
@@ -56,6 +57,7 @@ if (typeof wx !== 'undefined') {
   };
 
   global.window = window;
+  (window as any).window = window;
   global.document = document;
   global.canvas = canvas;
   global.Image = wx.createImage;

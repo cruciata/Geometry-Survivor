@@ -1,3 +1,8 @@
+// 0. 定义全局对象
+if (typeof GameGlobal !== 'undefined') {
+  GameGlobal.global = GameGlobal;
+}
+
 // 1. 引入适配器
 require('./weapp-adapter.js');
 

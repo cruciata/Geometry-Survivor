@@ -3268,12 +3268,20 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
     }
   };
 
+  const handleMouseUp = () => {
+    if (menuBtnState === 'pressed') {
+      setMenuBtnState('normal');
+      setGameState('PAUSED');
+    }
+    handleTouchEnd();
+  };
+
   const [joystickBase, setJoystickBase] = useState<{x: number, y: number} | null>(null);
   const [joystickStick, setJoystickStick] = useState<{x: number, y: number} | null>(null);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     if (gameState !== 'PLAYING') return;
-    const canvas = canvasRef.current;
+    const canvas = (typeof wx !== 'undefined' ? (window as any).canvas : canvasRef.current) as HTMLCanvasElement;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect ? canvas.getBoundingClientRect() : { left: 0, top: 0, width: canvas.width, height: canvas.height };
     const touch = e.touches[0];
@@ -3290,7 +3298,7 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
 
   const handleTouchMove = (e: React.TouchEvent) => {
     if (gameState !== 'PLAYING' || !joystickBase) return;
-    const canvas = canvasRef.current;
+    const canvas = (typeof wx !== 'undefined' ? (window as any).canvas : canvasRef.current) as HTMLCanvasElement;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect ? canvas.getBoundingClientRect() : { left: 0, top: 0, width: canvas.width, height: canvas.height };
     const touch = e.touches[0];
