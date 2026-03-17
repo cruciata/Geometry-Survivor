@@ -2,8 +2,8 @@ import { Skill, WeaponType, PassiveType, Character, Level } from './types';
 
 export const CHARACTERS: Character[] = [
   {
-    id: 'survivor',
-    name: '幸存者',
+    id: 'warrior',
+    name: '战士',
     description: '各方面属性均衡，适合新手。',
     color: '#1565c0',
     stats: { speed: 1.0, hp: 100, attackInterval: 1.0 },

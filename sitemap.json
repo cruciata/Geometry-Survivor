@@ -1,9 +1,7 @@
 {
-  "desc": "Geometry Warrior mini program sitemap",
-  "rules": [
-    {
-      "action": "allow",
-      "page": "*"
-    }
-  ]
+  "desc": "关于本小程序的搜索收录配置",
+  "rules": [{
+    "action": "allow",
+    "page": "*"
+  }]
 }

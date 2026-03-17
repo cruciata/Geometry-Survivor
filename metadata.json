@@ -1,5 +1,5 @@
 {
-  "name": "几何幸存者",
-  "description": "一款极简主义生存Roguelike游戏，控制几何图形在敌群中生存，升级并获得强大技能。",
+  "name": "几何战士",
+  "description": "一款极简风格的几何图形生存射击游戏，现已适配微信小程序架构。",
   "requestFramePermissions": []
 }

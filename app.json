@@ -1,15 +1,14 @@
 {
-	"pages": [
-		"pages/index/index",
-		"pages/webview/index"
-	],
-	"window": {
-		"navigationBarTitleText": "几何战士",
-		"navigationBarBackgroundColor": "#111827",
-		"navigationBarTextStyle": "white",
-		"backgroundColor": "#0f172a",
-		"backgroundTextStyle": "light"
-	},
-	"style": "v2",
-	"sitemapLocation": "sitemap.json"
+  "pages": [
+    "pages/index/index"
+  ],
+  "window": {
+    "backgroundTextStyle": "light",
+    "navigationBarBackgroundColor": "#000000",
+    "navigationBarTitleText": "几何战士",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#000000"
+  },
+  "sitemapLocation": "sitemap.json",
+  "style": "v2"
 }

@@ -2214,7 +2214,12 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
       ctx.fillStyle = 'white';
       ctx.font = 'bold 80px sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('几何幸存者', GAME_WIDTH / 2, GAME_HEIGHT / 2 - 150);
+      ctx.fillText('几何战士', GAME_WIDTH / 2, GAME_HEIGHT / 2 - 150);
+      
+      // Mini Program Ready Badge
+      ctx.fillStyle = '#07c160'; // WeChat Green
+      ctx.font = 'bold 16px sans-serif';
+      ctx.fillText('微信小程序版已就绪', GAME_WIDTH / 2, GAME_HEIGHT / 2 - 100);
       
       ctx.font = '24px sans-serif';
       ctx.fillStyle = '#666';

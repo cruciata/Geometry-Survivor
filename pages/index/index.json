@@ -1,3 +1,4 @@
 {
-  "navigationBarTitleText": "几何战士"
+  "navigationBarTitleText": "几何战士",
+  "disableScroll": true
 }

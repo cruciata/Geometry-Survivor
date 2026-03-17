@@ -1,21 +1,21 @@
-<view class="container">
-	<view class="title">几何战士</view>
-	<view class="subtitle">Web-View 小程序壳</view>
-
-	<view class="label">H5 地址（必须 HTTPS）</view>
-	<input
-		class="url-input"
-		type="text"
-		value="{{h5Url}}"
-		placeholder="https://cruciata.github.io/Geometry-Survivor/"
-		bindinput="onUrlInput"
-	/>
-
-	<button class="btn primary" bindtap="saveUrl">保存地址</button>
-	<button class="btn" bindtap="openGame">打开游戏</button>
-
-	<view class="tips-title">注意事项</view>
-	<view class="tip">1. 小程序仅支持加载 HTTPS 页面</view>
-	<view class="tip">2. 该域名需在微信公众平台配置为业务域名</view>
-	<view class="tip">3. H5 页面需可在手机浏览器正常访问</view>
+<!--pages/index/index.wxml-->
+<view class="game-container">
+  <canvas 
+    type="2d" 
+    id="gameCanvas" 
+    class="game-canvas"
+    bindtouchstart="touchStart"
+    bindtouchmove="touchMove"
+    bindtouchend="touchEnd"
+  ></canvas>
+  
+  <view class="ui-overlay" wx:if="{{gameState !== 'PLAYING'}}">
+    <view class="title">几何战士</view>
+    <button class="start-btn" bindtap="startGame">开始游戏</button>
+  </view>
+  
+  <view class="hud" wx:if="{{gameState === 'PLAYING'}}">
+    <text class="score">分数: {{score}}</text>
+    <text class="timer">时间: {{timerStr}}</text>
+  </view>
 </view>
