@@ -6,6 +6,7 @@ if (typeof wx !== 'undefined') {
   const _cancelAnimationFrame = (typeof cancelAnimationFrame !== 'undefined' ? cancelAnimationFrame : (typeof canvas.cancelAnimationFrame !== 'undefined' ? canvas.cancelAnimationFrame : (id => clearTimeout(id))));
 
   const window = {
+    get window() { return window; },
     innerWidth: wx.getSystemInfoSync().windowWidth,
     innerHeight: wx.getSystemInfoSync().windowHeight,
     devicePixelRatio: wx.getSystemInfoSync().pixelRatio,
@@ -57,7 +58,6 @@ if (typeof wx !== 'undefined') {
   };
 
   global.window = window;
-  window.window = window;
   global.document = document;
   global.canvas = canvas;
   global.Image = wx.createImage;
