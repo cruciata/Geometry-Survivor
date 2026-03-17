@@ -16,6 +16,7 @@ class AudioService {
   }
 
   private initContext() {
+    if (typeof wx !== 'undefined') return; // 微信小游戏不支持 Web Audio API 这种方式
     if (!this.ctx) {
       this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
       this.masterGain = this.ctx.createGain();

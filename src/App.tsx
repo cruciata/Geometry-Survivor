@@ -3029,6 +3029,37 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
   }, [gameState, currentLevelId, lavaHeight, platforms, laserTraps, gameItems, tutorialHint, killHints, score, timer, totalKills, isShadowWalkerUnlocked, victoryTime, levelUpOptions, hoveredIndex, mousePos, menuBtnState]);
 
   useEffect(() => {
+    const canvas = (typeof wx !== 'undefined' ? (window as any).canvas : canvasRef.current) as HTMLCanvasElement;
+    if (!canvas || typeof wx === 'undefined') return;
+
+    const handleTouch = (e: any) => {
+      const touch = e.touches[0] || e.changedTouches[0];
+      const mockEvent = {
+        clientX: touch.pageX,
+        clientY: touch.pageY,
+        preventDefault: () => {}
+      } as any;
+      
+      if (e.type === 'touchstart') handleMouseDown(mockEvent);
+      if (e.type === 'touchmove') handleMouseMove(mockEvent);
+      if (e.type === 'touchend') {
+        handleMouseUp();
+        handleClick(mockEvent);
+      }
+    };
+
+    canvas.addEventListener('touchstart', handleTouch);
+    canvas.addEventListener('touchmove', handleTouch);
+    canvas.addEventListener('touchend', handleTouch);
+    
+    return () => {
+      canvas.removeEventListener('touchstart', handleTouch);
+      canvas.removeEventListener('touchmove', handleTouch);
+      canvas.removeEventListener('touchend', handleTouch);
+    };
+  }, [gameState, joystickBase, hoveredIndex]);
+
+  useEffect(() => {
     const loop = () => {
       update();
       draw();
