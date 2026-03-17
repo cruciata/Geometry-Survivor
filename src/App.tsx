@@ -134,6 +134,95 @@ function drawPauseMenu(ctx: CanvasRenderingContext2D, hoveredIndex: number | nul
   });
 }
 
+function drawLevelUp(ctx: CanvasRenderingContext2D, options: Skill[], hoveredIndex: number | null) {
+  ctx.fillStyle = 'rgba(0,0,0,0.8)';
+  ctx.fillRect(0, 0, 750, 1334);
+
+  ctx.fillStyle = 'white';
+  ctx.font = 'bold 48px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('等级提升！', 375, 150);
+  ctx.font = '24px sans-serif';
+  ctx.fillStyle = '#aaa';
+  ctx.fillText('选择一个技能', 375, 200);
+
+  const cardW = 280;
+  const cardH = 340;
+  const spacing = 40;
+  const totalW = options.length <= 3 ? (cardW * options.length + spacing * (options.length - 1)) : (cardW * 2 + spacing);
+
+  options.forEach((skill, i) => {
+    let x, y;
+    if (options.length <= 3) {
+      x = (750 - totalW) / 2 + i * (cardW + spacing);
+      y = (1334 - cardH) / 2;
+    } else {
+      const col = i % 2;
+      const row = Math.floor(i / 2);
+      x = (750 - totalW) / 2 + col * (cardW + spacing);
+      y = (1334 - (cardH * 2 + spacing)) / 2 + row * (cardH + spacing);
+    }
+
+    const isHovered = hoveredIndex === i;
+    drawRoundRect(ctx, x, y, cardW, cardH, 20, isHovered ? '#2d2d2d' : '#1c1c1c', isHovered ? '#6366f1' : 'rgba(255,255,255,0.1)');
+
+    drawSkillIcon(ctx, x + cardW / 2, y + 80, skill, 100);
+
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold 24px sans-serif';
+    ctx.fillText(skill.name, x + cardW / 2, y + 160);
+
+    ctx.fillStyle = '#4caf50';
+    ctx.font = '18px sans-serif';
+    ctx.fillText(`等级 ${skill.level + 1}`, x + cardW / 2, y + 190);
+
+    ctx.fillStyle = '#aaa';
+    ctx.font = '16px sans-serif';
+    const lines = skill.description.split('\n');
+    lines.forEach((line, li) => {
+      ctx.fillText(line, x + cardW / 2, y + 230 + li * 24);
+    });
+  });
+}
+
+function drawGameOver(ctx: CanvasRenderingContext2D, score: number, time: string) {
+  ctx.fillStyle = 'rgba(0,0,0,0.9)';
+  ctx.fillRect(0, 0, 750, 1334);
+
+  const y = 400;
+  ctx.fillStyle = '#ef4444';
+  ctx.font = 'bold 80px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('战败', 375, y);
+
+  ctx.fillStyle = '#aaa';
+  ctx.font = '24px sans-serif';
+  ctx.fillText(`你坚持了 ${time}`, 375, y + 60);
+
+  const statsY = y + 150;
+  ctx.fillStyle = 'rgba(255,255,255,0.05)';
+  ctx.fillRect(375 - 160, statsY, 150, 100);
+  ctx.fillRect(375 + 10, statsY, 150, 100);
+
+  ctx.fillStyle = '#666';
+  ctx.font = 'bold 14px sans-serif';
+  ctx.fillText('得分', 375 - 85, statsY + 30);
+  ctx.fillText('击杀', 375 + 85, statsY + 30);
+
+  ctx.fillStyle = 'white';
+  ctx.font = 'bold 32px monospace';
+  ctx.fillText(score.toString(), 375 - 85, statsY + 70);
+  ctx.fillText(Math.floor(score / 10).toString(), 375 + 85, statsY + 70);
+
+  const btnW = 300, btnH = 60;
+  const btnX = (750 - btnW) / 2;
+  const btnY = y + 350;
+  drawRoundRect(ctx, btnX, btnY, btnW, btnH, 30, '#333', 'white');
+  ctx.fillStyle = 'white';
+  ctx.font = 'bold 24px sans-serif';
+  ctx.fillText('返回主菜单', 375, btnY + 38);
+}
+
 // 绘制多边形（三角形、菱形、五角星等）
 function drawPolygon(ctx: CanvasRenderingContext2D, cx: number, cy: number, radius: number, sides: number, color: string, rotation = 0) {
   ctx.beginPath();
@@ -514,6 +603,12 @@ const GAME_WIDTH = 750;
 
 const GAME_HEIGHT = 1334;
 
+const formatTime = (ms: number) => {
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  return `${m}:${(s % 60).toString().padStart(2, '0')}`;
+};
+
 export default function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [gameState, setGameState] = useState<'START' | 'PLAYING' | 'LEVEL_UP' | 'GAME_OVER' | 'VICTORY' | 'REVIVE' | 'CHARACTER_SELECT' | 'LEVEL_SELECT' | 'PAUSED' | 'ACHIEVEMENTS'>('START');
@@ -553,37 +648,62 @@ export default function App() {
 
   // Load data
   useEffect(() => {
-    const savedChars = localStorage.getItem('unlockedCharacters');
-    if (savedChars) setUnlockedCharacterIds(JSON.parse(savedChars));
-    const savedLevels = localStorage.getItem('unlockedLevels');
-    if (savedLevels) setUnlockedLevelIds(JSON.parse(savedLevels));
-    const savedAchievements = localStorage.getItem('unlockedAchievements');
-    if (savedAchievements) setUnlockedAchievements(JSON.parse(savedAchievements));
-    const savedTotalKills = localStorage.getItem('totalKillsEver');
-    if (savedTotalKills) setTotalKillsEver(parseInt(savedTotalKills));
-    const savedTotalGems = localStorage.getItem('totalGemsEver');
-    if (savedTotalGems) setTotalGemsEver(parseInt(savedTotalGems));
+    const getStorage = (key: string) => {
+      if (typeof wx !== 'undefined') return wx.getStorageSync(key);
+      return localStorage.getItem(key);
+    };
+    
+    const savedChars = getStorage('unlockedCharacters');
+    if (savedChars) setUnlockedCharacterIds(typeof savedChars === 'string' ? JSON.parse(savedChars) : savedChars);
+    const savedLevels = getStorage('unlockedLevels');
+    if (savedLevels) setUnlockedLevelIds(typeof savedLevels === 'string' ? JSON.parse(savedLevels) : savedLevels);
+    const savedAchievements = getStorage('unlockedAchievements');
+    if (savedAchievements) setUnlockedAchievements(typeof savedAchievements === 'string' ? JSON.parse(savedAchievements) : savedAchievements);
+    const savedTotalKills = getStorage('totalKillsEver');
+    if (savedTotalKills) setTotalKillsEver(typeof savedTotalKills === 'number' ? savedTotalKills : parseInt(savedTotalKills));
+    const savedTotalGems = getStorage('totalGemsEver');
+    if (savedTotalGems) setTotalGemsEver(typeof savedTotalGems === 'number' ? savedTotalGems : parseInt(savedTotalGems));
   }, []);
 
   // Save data
   useEffect(() => {
-    localStorage.setItem('unlockedCharacters', JSON.stringify(unlockedCharacterIds));
+    const setStorage = (key: string, value: any) => {
+      if (typeof wx !== 'undefined') wx.setStorageSync(key, value);
+      else localStorage.setItem(key, JSON.stringify(value));
+    };
+    setStorage('unlockedCharacters', unlockedCharacterIds);
   }, [unlockedCharacterIds]);
 
   useEffect(() => {
-    localStorage.setItem('unlockedLevels', JSON.stringify(unlockedLevelIds));
+    const setStorage = (key: string, value: any) => {
+      if (typeof wx !== 'undefined') wx.setStorageSync(key, value);
+      else localStorage.setItem(key, JSON.stringify(value));
+    };
+    setStorage('unlockedLevels', unlockedLevelIds);
   }, [unlockedLevelIds]);
 
   useEffect(() => {
-    localStorage.setItem('unlockedAchievements', JSON.stringify(unlockedAchievements));
+    const setStorage = (key: string, value: any) => {
+      if (typeof wx !== 'undefined') wx.setStorageSync(key, value);
+      else localStorage.setItem(key, JSON.stringify(value));
+    };
+    setStorage('unlockedAchievements', unlockedAchievements);
   }, [unlockedAchievements]);
 
   useEffect(() => {
-    localStorage.setItem('totalKillsEver', totalKillsEver.toString());
+    const setStorage = (key: string, value: any) => {
+      if (typeof wx !== 'undefined') wx.setStorageSync(key, value);
+      else localStorage.setItem(key, value.toString());
+    };
+    setStorage('totalKillsEver', totalKillsEver);
   }, [totalKillsEver]);
 
   useEffect(() => {
-    localStorage.setItem('totalGemsEver', totalGemsEver.toString());
+    const setStorage = (key: string, value: any) => {
+      if (typeof wx !== 'undefined') wx.setStorageSync(key, value);
+      else localStorage.setItem(key, value.toString());
+    };
+    setStorage('totalGemsEver', totalGemsEver);
   }, [totalGemsEver]);
 
   const unlockAchievement = (id: string) => {
@@ -2207,6 +2327,21 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
       return;
     }
 
+    if (gameState === 'LEVEL_UP') {
+      drawLevelUp(ctx, levelUpOptions, hoveredIndex);
+      return;
+    }
+
+    if (gameState === 'GAME_OVER') {
+      drawGameOver(ctx, score, formatTime(timer));
+      return;
+    }
+
+    if (gameState === 'PAUSED') {
+      drawPauseMenu(ctx, hoveredIndex);
+      return;
+    }
+
     if (gameState === 'START') {
       ctx.fillStyle = 'rgba(0,0,0,0.8)';
       ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
@@ -2567,6 +2702,23 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
     ctx.arc(player.pos.x, player.pos.y, player.attackRange, 0, Math.PI * 2);
     ctx.stroke();
 
+    // Draw Joystick on top if playing
+    if (gameState === 'PLAYING' && joystickBase && joystickStick) {
+      ctx.save();
+      ctx.globalAlpha = 0.5;
+      ctx.beginPath();
+      ctx.arc(joystickBase.x, joystickBase.y, 60, 0, Math.PI * 2);
+      ctx.strokeStyle = 'white';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      
+      ctx.beginPath();
+      ctx.arc(joystickStick.x, joystickStick.y, 30, 0, Math.PI * 2);
+      ctx.fillStyle = 'white';
+      ctx.fill();
+      ctx.restore();
+    }
+
     drawPlayer(ctx, player);
 
     // UI: Top Bar (Simplified)
@@ -2916,12 +3068,6 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
     setGameState('PLAYING');
   };
 
-  const formatTime = (ms: number) => {
-    const s = Math.floor(ms / 1000);
-    const m = Math.floor(s / 60);
-    return `${m}:${(s % 60).toString().padStart(2, '0')}`;
-  };
-
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = (typeof wx !== 'undefined' ? (window as any).canvas : canvasRef.current) as HTMLCanvasElement;
     if (!canvas) return;
@@ -3122,8 +3268,60 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
     }
   };
 
-  const handleMouseUp = () => {
-    setMenuBtnState('normal');
+  const [joystickBase, setJoystickBase] = useState<{x: number, y: number} | null>(null);
+  const [joystickStick, setJoystickStick] = useState<{x: number, y: number} | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (gameState !== 'PLAYING') return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect ? canvas.getBoundingClientRect() : { left: 0, top: 0, width: canvas.width, height: canvas.height };
+    const touch = e.touches[0];
+    const scaleX = GAME_WIDTH / (rect.width || canvas.width);
+    const scaleY = GAME_HEIGHT / (rect.height || canvas.height);
+    const tx = (touch.clientX - rect.left) * scaleX;
+    const ty = (touch.clientY - rect.top) * scaleY;
+
+    if (ty > 150) { // Only trigger joystick in lower area
+      setJoystickBase({ x: tx, y: ty });
+      setJoystickStick({ x: tx, y: ty });
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (gameState !== 'PLAYING' || !joystickBase) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect ? canvas.getBoundingClientRect() : { left: 0, top: 0, width: canvas.width, height: canvas.height };
+    const touch = e.touches[0];
+    const scaleX = GAME_WIDTH / (rect.width || canvas.width);
+    const scaleY = GAME_HEIGHT / (rect.height || canvas.height);
+    const tx = (touch.clientX - rect.left) * scaleX;
+    const ty = (touch.clientY - rect.top) * scaleY;
+
+    const dx = tx - joystickBase.x;
+    const dy = ty - joystickBase.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const maxDist = 60;
+
+    let finalX = tx;
+    let finalY = ty;
+    if (dist > maxDist) {
+      finalX = joystickBase.x + (dx / dist) * maxDist;
+      finalY = joystickBase.y + (dy / dist) * maxDist;
+    }
+
+    setJoystickStick({ x: finalX, y: finalY });
+    joystickDir.current = {
+      x: (finalX - joystickBase.x) / maxDist,
+      y: (finalY - joystickBase.y) / maxDist
+    };
+  };
+
+  const handleTouchEnd = () => {
+    setJoystickBase(null);
+    setJoystickStick(null);
+    joystickDir.current = { x: 0, y: 0 };
   };
 
   const handleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -3236,33 +3434,19 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
   };
 
   return (
-    <div className="fixed inset-0 bg-zinc-950 flex items-center justify-center overflow-hidden font-sans select-none">
-      <div 
-        className="relative bg-black shadow-2xl overflow-hidden"
-        style={{ width: GAME_WIDTH, height: GAME_HEIGHT, transform: 'scale(0.5)', transformOrigin: 'center' }}
-      >
-        <canvas 
-          ref={canvasRef}
-          width={GAME_WIDTH}
-          height={GAME_HEIGHT}
-          onMouseMove={handleMouseMove}
-          onMouseDown={handleMouseDown}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
-          onClick={handleClick}
-          className="block"
-        />
-
-        {gameState === 'PLAYING' && (
-          <div className="absolute top-[70px] left-0 right-0 bottom-0 z-10">
-            <Joystick onMove={(dir) => joystickDir.current = dir} />
-          </div>
-        )}
-
-        <AnimatePresence>
-          {/* Removed GameOver component as it is now handled by Canvas */}
-        </AnimatePresence>
-      </div>
-    </div>
+    <canvas 
+      ref={canvasRef}
+      width={GAME_WIDTH}
+      height={GAME_HEIGHT}
+      onMouseMove={handleMouseMove}
+      onMouseDown={handleMouseDown}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
+      onClick={handleClick}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      style={{ width: '100vw', height: '100vh', display: 'block', background: '#000' }}
+    />
   );
 }
