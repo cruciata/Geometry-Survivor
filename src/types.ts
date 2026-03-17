@@ -128,15 +128,19 @@ export interface Level {
 
 export interface LaserTrap {
   id: string;
+  x?: number;
   y: number;
   state: 'warning' | 'active' | 'fade';
   timer: number;
+  active?: boolean;
 }
 
 export interface Platform {
   x: number;
   y: number;
   radius: number;
+  w?: number;
+  h?: number;
 }
 
 export interface Projectile {
@@ -172,4 +176,9 @@ export interface Achievement {
 export interface AchievementData {
   id: string;
   unlockedAt: number;
+}
+
+declare global {
+  const wx: any;
+  const GameGlobal: any;
 }

@@ -609,11 +609,45 @@ const formatTime = (ms: number) => {
   return `${m}:${(s % 60).toString().padStart(2, '0')}`;
 };
 
+// 错误边界组件
+class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean, error: Error | null }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  override componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error("Game Error:", error, errorInfo);
+  }
+
+  override render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: '20px', color: 'white', background: '#b71c1c', height: '100vh', overflow: 'auto' }}>
+          <h1>游戏运行出错</h1>
+          <pre>{this.state.error?.message}</pre>
+          <button 
+            onClick={() => window.location.reload()}
+            style={{ padding: '10px 20px', background: 'white', color: 'black', border: 'none', borderRadius: '5px' }}
+          >
+            刷新页面
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [gameState, setGameState] = useState<'START' | 'PLAYING' | 'LEVEL_UP' | 'GAME_OVER' | 'VICTORY' | 'REVIVE' | 'CHARACTER_SELECT' | 'LEVEL_SELECT' | 'PAUSED' | 'ACHIEVEMENTS'>('START');
   const [score, setScore] = useState(0);
-  const [timer, setTimer] = useState(0);
+  const timerRef = useRef(0); // 用于逻辑计算和显示的计时器
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [menuBtnState, setMenuBtnState] = useState<'normal' | 'pressed'>('normal');
   const [totalKills, setTotalKills] = useState(0);
@@ -730,6 +764,7 @@ export default function App() {
   // Game Entities (Refs for performance in game loop)
   const playerRef = useRef<Player>({
     id: 'player',
+    characterId: 'survivor',
     pos: { x: GAME_WIDTH / 2, y: GAME_HEIGHT / 2 },
     radius: 20,
     hp: 100,
@@ -754,7 +789,7 @@ export default function App() {
   const firstKillDone = useRef(false);
   const swordAngle = useRef(0);
   const particlesRef = useRef<{ x: number, y: number, vx: number, vy: number, life: number, color: string, size: number }[]>([]);
-  const requestRef = useRef<number>();
+  const requestRef = useRef<number>(0);
 
   const getCurrentPhase = (timeMs: number) => {
     const s = timeMs / 1000;
@@ -781,7 +816,7 @@ export default function App() {
     setGameItems([]);
     setKillHints([]);
     setScore(0);
-    setTimer(0);
+    timerRef.current = 0;
     setTotalKills(0);
     setBossKilled(false);
   };
@@ -841,7 +876,6 @@ export default function App() {
     setGameItems([]);
     swordAngle.current = 0;
     setScore(0);
-    setTimer(0);
     setTotalKills(0);
     setBossKilled(false);
     setTutorialHint({ text: '拖动左下角摇杆移动', life: 180 });
@@ -863,8 +897,8 @@ export default function App() {
       case 3: x = -margin; y = Math.random() * GAME_HEIGHT; break;
     }
 
-    const timeS = timer / 1000;
-    const phase = getCurrentPhase(timer);
+    const timeS = timerRef.current / 1000;
+    const phase = getCurrentPhase(timerRef.current);
     const level = LEVELS.find(l => l.id === currentLevelId) || LEVELS[0];
     
     let type: Enemy['type'] = 'TRIANGLE';
@@ -988,7 +1022,7 @@ export default function App() {
       isCharging: type === 'CHARGER' ? false : undefined,
     };
     enemiesRef.current.push(enemy);
-  }, [timer, currentLevelId]);
+  }, [currentLevelId]);
 
   const fireWeapon = (type: WeaponType, level: number) => {
     const player = playerRef.current;
@@ -1007,8 +1041,8 @@ export default function App() {
 
     if (!nearest && type !== WeaponType.SPIKE) return;
 
-    const dx = nearest ? nearest.pos.x - player.pos.x : 0;
-    const dy = nearest ? nearest.pos.y - player.pos.y : 0;
+    const dx = nearest ? (nearest as Enemy).pos.x - player.pos.x : 0;
+    const dy = nearest ? (nearest as Enemy).pos.y - player.pos.y : 0;
     const dist = Math.sqrt(dx * dx + dy * dy);
     const dir = { x: dist > 0 ? dx / dist : 1, y: dist > 0 ? dy / dist : 0 };
 
@@ -1052,10 +1086,10 @@ export default function App() {
       audioService.playLightning();
       const damage = 15 + level * 8;
       if (nearest) {
-        nearest.hp -= damage;
+        (nearest as Enemy).hp -= damage;
         projectilesRef.current.push({
           id: Math.random().toString(),
-          pos: { ...nearest.pos },
+          pos: { ...(nearest as Enemy).pos },
           vel: { x: 0, y: 0 },
           damage: 0,
           radius: 20,
@@ -1102,7 +1136,7 @@ export default function App() {
     } else if (type === WeaponType.BOMB) {
       audioService.playShoot();
       const flightTime = 48; // 0.8s
-      const targetPos = nearest ? { ...nearest.pos } : { x: player.pos.x + dir.x * 200, y: player.pos.y + dir.y * 200 };
+      const targetPos = nearest ? { ...(nearest as Enemy).pos } : { x: player.pos.x + dir.x * 200, y: player.pos.y + dir.y * 200 };
       const vx = (targetPos.x - player.pos.x) / flightTime;
       const vy = (targetPos.y - player.pos.y) / flightTime;
       
@@ -1130,14 +1164,14 @@ export default function App() {
 
     const player = playerRef.current;
     const now = Date.now();
-    let phase = getCurrentPhase(timer);
+    let phase = getCurrentPhase(timerRef.current);
 
     // Clear shields at start of frame
     enemiesRef.current.forEach(e => e.shieldedBy = undefined);
 
     // Passive: Sprint
     let currentSpeed = player.speed;
-    if (timer < 30000 && player.skills.some(s => s.id === 'sprint')) {
+    if (timerRef.current < 30000 && player.skills.some(s => s.id === 'sprint')) {
       currentSpeed *= 1.5;
     }
 
@@ -1164,8 +1198,8 @@ export default function App() {
     if (currentLevelId === 'volcano') {
       setLavaHeight(prev => Math.min(GAME_HEIGHT, prev + 0.1));
       const onPlatform = platforms.some(p => 
-        player.pos.x >= p.x && player.pos.x <= p.x + p.w &&
-        player.pos.y >= p.y && player.pos.y <= p.y + p.h
+        player.pos.x >= p.x && player.pos.x <= p.x + p.w! &&
+        player.pos.y >= p.y && player.pos.y <= p.y + p.h!
       );
       if (player.pos.y > GAME_HEIGHT - lavaHeight && !onPlatform) {
         player.hp -= 0.5;
@@ -1182,7 +1216,7 @@ export default function App() {
           trap.timer = trap.active ? 120 : 180;
         }
         if (trap.active) {
-          const dx = player.pos.x - trap.x;
+          const dx = player.pos.x - trap.x!;
           const dy = player.pos.y - trap.y;
           const dist = Math.sqrt(dx * dx + dy * dy);
           if (dist < player.radius + 5) {
@@ -1368,7 +1402,7 @@ export default function App() {
           // @ts-ignore
           enemy.pos.y += enemy.chargeVel.y;
           enemy.chargeTimer!--;
-          if (enemy.chargeTimer <= 0) {
+          if (enemy.chargeTimer! <= 0) {
             enemy.isCharging = false;
             enemy.chargeTimer = 0;
           }
@@ -1606,8 +1640,8 @@ export default function App() {
           if (d < minDist) { minDist = d; target = e; }
         });
         if (target) {
-          const dx = target.pos.x - p.pos.x;
-          const dy = target.pos.y - p.pos.y;
+          const dx = (target as Enemy).pos.x - p.pos.x;
+          const dy = (target as Enemy).pos.y - p.pos.y;
           const d = Math.sqrt(dx * dx + dy * dy);
           p.vel.x = (dx / d) * 5;
           p.vel.y = (dy / d) * 5;
@@ -1632,7 +1666,7 @@ export default function App() {
               audioService.playExplosion();
               enemiesRef.current.forEach(e2 => {
                 const d2 = Math.sqrt((e2.pos.x - p.pos.x)**2 + (e2.pos.y - p.pos.y)**2);
-                if (d2 < p.explosionRadius) {
+                if (p.explosionRadius && d2 < p.explosionRadius) {
                   if (!e2.shieldedBy) {
                     e2.hp -= p.damage * 0.5;
                   }
@@ -1852,31 +1886,31 @@ export default function App() {
     });
 
     // Spawning logic
-    phase = getCurrentPhase(timer);
+    phase = getCurrentPhase(timerRef.current);
     let spawnInterval = 1200; // Faster base spawn rate
     if (phase === 'buildup') {
-      spawnInterval = Math.max(600, 1200 - (timer / 1000 - 30) * 20);
+      spawnInterval = Math.max(600, 1200 - (timerRef.current / 1000 - 30) * 20);
     } else if (phase === 'climax') {
       spawnInterval = 400;
     } else if (phase === 'boss') {
       spawnInterval = Infinity;
     }
 
-    if (timer - lastSpawnTime.current > spawnInterval && phase !== 'boss') {
+    if (timerRef.current - lastSpawnTime.current > spawnInterval && phase !== 'boss') {
       spawnEnemy();
-      lastSpawnTime.current = timer;
+      lastSpawnTime.current = timerRef.current;
     }
 
     // Special Events
-    if (Math.floor(timer / 1000) === 60 && !enemiesRef.current.some(e => e.isElite)) {
+    if (Math.floor(timerRef.current / 1000) === 60 && !enemiesRef.current.some(e => e.isElite)) {
       spawnEnemy('STAR');
     }
-    if (Math.floor(timer / 1000) === 120 && gameItems.length === 0) {
+    if (Math.floor(timerRef.current / 1000) === 120 && gameItems.length === 0) {
       setGameItems([{ id: 'clear', pos: { x: GAME_WIDTH / 2, y: GAME_HEIGHT / 2 }, type: 'CLEAR', radius: 30, rotation: 0 }]);
     }
     const level = LEVELS.find(l => l.id === currentLevelId) || LEVELS[0];
     const bossSpawnTime = level.duration - 30;
-    if (Math.floor(timer / 1000) === bossSpawnTime && !enemiesRef.current.some(e => e.type === 'BOSS') && !bossKilled) {
+    if (Math.floor(timerRef.current / 1000) === bossSpawnTime && !enemiesRef.current.some(e => e.type === 'BOSS') && !bossKilled) {
       spawnEnemy('BOSS');
     }
 
@@ -1898,7 +1932,7 @@ export default function App() {
       return true;
     }));
 
-    if (level.duration > 0 && timer >= level.duration * 1000) {
+    if (level.duration > 0 && timerRef.current >= level.duration * 1000) {
       setGameState('VICTORY');
       if (!unlockedCharacterIds.includes('shadow')) {
         setUnlockedCharacterIds(prev => [...prev, 'shadow']);
@@ -1911,8 +1945,8 @@ export default function App() {
       if (tutorialHint.life <= 0) setTutorialHint(null);
     }
 
-    setTimer(t => t + 16);
-  }, [gameState, spawnEnemy, timer, tutorialHint, gameItems, bossKilled, mousePos, currentLevelId]);
+    timerRef.current += 16;
+  }, [gameState, spawnEnemy, tutorialHint, gameItems, bossKilled, mousePos, currentLevelId]);
 
 function drawGear(ctx: CanvasRenderingContext2D, cx: number, cy: number, teeth: number, rotation: number, color: string) {
   ctx.save();
@@ -2309,8 +2343,14 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
   const draw = useCallback(() => {
     const canvas = (typeof wx !== 'undefined' ? (window as any).canvas : canvasRef.current) as HTMLCanvasElement;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { alpha: false }); // 优化性能
     if (!ctx) return;
+
+    // 每帧开始前清空画布
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+    const currentTimer = timerRef.current;
 
     if (gameState === 'CHARACTER_SELECT') {
       drawCharacterSelect(ctx);
@@ -2333,7 +2373,7 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
     }
 
     if (gameState === 'GAME_OVER') {
-      drawGameOver(ctx, score, formatTime(timer));
+      drawGameOver(ctx, score, formatTime(timerRef.current));
       return;
     }
 
@@ -2676,7 +2716,7 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
         ctx.stroke();
       }
       
-      if (e.type !== 'BOSS') {
+      if ((e.type as string) !== 'BOSS') {
         ctx.fillStyle = '#333';
         ctx.fillRect(e.pos.x - 15, e.pos.y - e.radius - 10, 30, 4);
         ctx.fillStyle = '#ef4444';
@@ -2722,7 +2762,7 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
     drawPlayer(ctx, player);
 
     // UI: Top Bar (Simplified)
-    drawTopBar(ctx, timer, score, player, menuBtnState, isMuted);
+    drawTopBar(ctx, timerRef.current, score, player, menuBtnState, isMuted);
 
     // Achievement Notification
     if (achievementNotification) {
@@ -2808,7 +2848,7 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
     }
 
     // Menus
-    if (gameState === 'REVIVE' || gameState === 'VICTORY' || gameState === 'GAME_OVER') {
+    if ((gameState as string) === 'REVIVE' || (gameState as string) === 'VICTORY' || (gameState as string) === 'GAME_OVER') {
       ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
       ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
       
@@ -2820,7 +2860,7 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
       ctx.fillStyle = 'white';
       ctx.font = 'bold 32px sans-serif';
       ctx.textAlign = 'center';
-      const title = gameState === 'VICTORY' ? '生存成功！' : `你坚持了 ${formatTime(timer)}`;
+      const title = gameState === 'VICTORY' ? '生存成功！' : `你坚持了 ${formatTime(timerRef.current)}`;
       ctx.fillText(title, GAME_WIDTH / 2, my + 50);
       
       ctx.fillStyle = '#999';
@@ -2922,7 +2962,7 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
           ctx.font = 'bold 18px sans-serif';
           ctx.fillText('返回主菜单', GAME_WIDTH / 2, by + 32);
         }
-      } else if (gameState === 'GAME_OVER') {
+      } else if ((gameState as string) === 'GAME_OVER') {
         const btnW = 200;
         const btnH = 50;
         const bx = (GAME_WIDTH - btnW) / 2;
@@ -2936,7 +2976,7 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
     }
 
     // Level Up Menu (Canvas)
-    if (gameState === 'LEVEL_UP') {
+    if ((gameState as string) === 'LEVEL_UP') {
       ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
       ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
 
@@ -3023,15 +3063,16 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
         ctx.restore();
       });
     }
-    if (gameState === 'PAUSED') {
+    if ((gameState as string) === 'PAUSED') {
       drawPauseMenu(ctx, hoveredIndex);
     }
-  }, [gameState, currentLevelId, lavaHeight, platforms, laserTraps, gameItems, tutorialHint, killHints, score, timer, totalKills, isShadowWalkerUnlocked, victoryTime, levelUpOptions, hoveredIndex, mousePos, menuBtnState]);
+  }, [gameState, currentLevelId, lavaHeight, platforms, laserTraps, gameItems, tutorialHint, killHints, score, totalKills, isShadowWalkerUnlocked, victoryTime, levelUpOptions, hoveredIndex, mousePos, menuBtnState]);
 
   useEffect(() => {
     const canvas = (typeof wx !== 'undefined' ? (window as any).canvas : canvasRef.current) as HTMLCanvasElement;
-    if (!canvas || typeof wx === 'undefined') return;
+    if (!canvas) return;
 
+    // 在浏览器预览环境下也允许运行，方便调试
     const handleTouch = (e: any) => {
       const touch = e.touches[0] || e.changedTouches[0];
       const mockEvent = {
@@ -3057,17 +3098,27 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
       canvas.removeEventListener('touchmove', handleTouch);
       canvas.removeEventListener('touchend', handleTouch);
     };
-  }, [gameState, joystickBase, hoveredIndex]);
+  }, [gameState, hoveredIndex]);
+
+  const updateRef = useRef(update);
+  const drawRef = useRef(draw);
+
+  useEffect(() => {
+    updateRef.current = update;
+    drawRef.current = draw;
+  }, [update, draw]);
 
   useEffect(() => {
     const loop = () => {
-      update();
-      draw();
+      if (updateRef.current) updateRef.current();
+      if (drawRef.current) drawRef.current();
       requestRef.current = requestAnimationFrame(loop);
     };
     requestRef.current = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(requestRef.current!);
-  }, [update, draw]);
+    return () => {
+      if (requestRef.current) cancelAnimationFrame(requestRef.current);
+    };
+  }, []);
 
   const handleSkillSelect = (skill: Skill) => {
     const player = playerRef.current;
@@ -3473,19 +3524,21 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: Player) {
   };
 
   return (
-    <canvas 
-      ref={canvasRef}
-      width={GAME_WIDTH}
-      height={GAME_HEIGHT}
-      onMouseMove={handleMouseMove}
-      onMouseDown={handleMouseDown}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
-      onClick={handleClick}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-      style={{ width: '100vw', height: '100vh', display: 'block', background: '#000' }}
-    />
+    <ErrorBoundary>
+      <canvas 
+        ref={canvasRef}
+        width={GAME_WIDTH}
+        height={GAME_HEIGHT}
+        onMouseMove={handleMouseMove}
+        onMouseDown={handleMouseDown}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+        onClick={handleClick}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        style={{ width: '100vw', height: '100vh', display: 'block', background: '#000' }}
+      />
+    </ErrorBoundary>
   );
 }

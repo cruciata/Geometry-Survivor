@@ -1,66 +1,61 @@
-// 这是一个简化的适配器，用于在微信小游戏环境中模拟浏览器基础 API
+// 极简适配器：只提供游戏运行必须的变量，不改写 window/document 等只读属性
 if (typeof wx !== 'undefined') {
-  const global = (typeof GameGlobal !== 'undefined' ? GameGlobal : {});
+  const GameGlobal = (typeof global !== 'undefined' ? global : {});
+  
+  // 1. 创建主画布
   const canvas = wx.createCanvas();
-  const _requestAnimationFrame = (typeof requestAnimationFrame !== 'undefined' ? requestAnimationFrame : (typeof canvas.requestAnimationFrame !== 'undefined' ? canvas.requestAnimationFrame : (fn => setTimeout(fn, 16))));
-  const _cancelAnimationFrame = (typeof cancelAnimationFrame !== 'undefined' ? cancelAnimationFrame : (typeof canvas.cancelAnimationFrame !== 'undefined' ? canvas.cancelAnimationFrame : (id => clearTimeout(id))));
+  
+  // 2. 获取系统信息（只调用一次）
+  const systemInfo = wx.getSystemInfoSync();
 
-  const window = {
-    get window() { return window; },
-    innerWidth: wx.getSystemInfoSync().windowWidth,
-    innerHeight: wx.getSystemInfoSync().windowHeight,
-    devicePixelRatio: wx.getSystemInfoSync().pixelRatio,
-    requestAnimationFrame: _requestAnimationFrame,
-    cancelAnimationFrame: _cancelAnimationFrame,
-    setTimeout: setTimeout,
-    clearTimeout: clearTimeout,
-    setInterval: setInterval,
-    clearInterval: clearInterval,
-    addEventListener: (type, listener) => {
-      if (type === 'touchstart' || type === 'mousedown') {
-        wx.onTouchStart(res => {
-          const touch = res.touches[0] || res.changedTouches[0];
-          listener({ clientX: touch.pageX, clientY: touch.pageY, touches: res.touches, changedTouches: res.changedTouches, preventDefault: () => {} });
+  // 3. 定义一个安全注入函数
+  const safeInject = (key, value) => {
+    try {
+      // 如果属性不存在，或者虽然存在但可配置，才进行定义
+      const desc = Object.getOwnPropertyDescriptor(GameGlobal, key);
+      if (!desc || desc.configurable) {
+        // 额外检查：如果已经有该属性且没有 setter，则跳过，防止报错
+        if (desc && !desc.set && !desc.writable && desc.get) {
+          console.warn(`跳过只读属性 ${key}`);
+          return;
+        }
+        Object.defineProperty(GameGlobal, key, {
+          value: value,
+          writable: true,
+          configurable: true,
+          enumerable: true
         });
       }
-      if (type === 'touchmove' || type === 'mousemove') {
-        wx.onTouchMove(res => {
-          const touch = res.touches[0] || res.changedTouches[0];
-          listener({ clientX: touch.pageX, clientY: touch.pageY, touches: res.touches, changedTouches: res.changedTouches, preventDefault: () => {} });
-        });
-      }
-      if (type === 'touchend' || type === 'mouseup' || type === 'click') {
-        wx.onTouchEnd(res => {
-          const touch = res.touches[0] || res.changedTouches[0];
-          listener({ clientX: touch ? touch.pageX : 0, clientY: touch ? touch.pageY : 0, touches: res.touches, changedTouches: res.changedTouches, preventDefault: () => {} });
-        });
-      }
-    },
-    removeEventListener: () => {},
-    performance: {
-      now: () => Date.now()
-    },
-    screen: {
-      width: wx.getSystemInfoSync().screenWidth,
-      height: wx.getSystemInfoSync().screenHeight,
+    } catch (e) {
+      console.warn(`注入 ${key} 失败:`, e.message);
     }
   };
 
-  const document = {
-    createElement: (type) => {
+  // 4. 注入游戏引擎最常用的变量
+  // 注意：不要注入 'window'，因为在某些环境下它是只读的
+  if (typeof GameGlobal.window === 'undefined') {
+    safeInject('window', GameGlobal);
+  }
+  
+  safeInject('canvas', canvas);
+  safeInject('innerWidth', systemInfo.windowWidth);
+  safeInject('innerHeight', systemInfo.windowHeight);
+  safeInject('devicePixelRatio', systemInfo.pixelRatio);
+  
+  // 5. 模拟最基础的 document.createElement (很多引擎会用到)
+  const mockDocument = {
+    createElement(type) {
       if (type === 'canvas') return wx.createCanvas();
       if (type === 'image') return wx.createImage();
       return {};
     },
-    body: {
-      appendChild: () => {},
-    },
+    body: { appendChild() {} }
   };
+  safeInject('document', mockDocument);
 
-  global.window = window;
-  global.document = document;
-  global.canvas = canvas;
-  global.Image = wx.createImage;
-  global.location = { href: '' };
-  global.navigator = { userAgent: 'wechat' };
+  // 6. 统一计时器
+  safeInject('requestAnimationFrame', GameGlobal.requestAnimationFrame || (fn => setTimeout(fn, 16)));
+  safeInject('cancelAnimationFrame', GameGlobal.cancelAnimationFrame || (id => clearTimeout(id)));
+
+  console.log('极简适配器加载完成，避开了只读 API 调用');
 }
